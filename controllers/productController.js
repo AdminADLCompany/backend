@@ -110,3 +110,30 @@ exports.deleteProduct = catchAsyncErrors( async (req, res, next) => {
         data: product
     });
 });
+exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
+  const { graph } = req.body;
+
+  if (!graph || !Array.isArray(graph)) {
+    return next(new ErrorHandler("Graph must be an array of objects", 400));
+  }
+
+  const product = await Product.findByIdAndUpdate(
+    req.params.id,
+    {
+      graph,
+      updatedAt: Date.now(),
+      updatedBy: req.user._id
+    },
+    { new: true, runValidators: true }
+  ).populate("updatedBy", "userName email");
+
+  if (!product) {
+    return next(new ErrorHandler("Product not found", 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Graph data added successfully",
+    data: product
+  });
+});

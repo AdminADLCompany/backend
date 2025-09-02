@@ -64,6 +64,12 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    graph: [
+        {
+            name: { type: String, required: true },
+            data: [{ type: Number, required: true }]
+        }
+    ],
     updatedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
