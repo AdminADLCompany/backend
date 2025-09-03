@@ -110,6 +110,7 @@ exports.deleteProduct = catchAsyncErrors( async (req, res, next) => {
         data: product
     });
 });
+
 exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
   const { graph } = req.body;
 

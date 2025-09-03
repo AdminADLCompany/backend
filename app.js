@@ -10,7 +10,7 @@ const errorHandler = require('./middleware/error');
 
 // Use CORS middleware
 app.use(cors({
-    origin: ['http://localhost:3000'], // Add all your frontend URLs
+    origin: ['http://localhost:3000', 'https://adlcompany.web.app'], // Add all your frontend URLs
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }));
