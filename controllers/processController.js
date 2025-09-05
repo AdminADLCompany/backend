@@ -135,8 +135,8 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
 
     // Loop through all items and replace those with value "processId" and a process key
     for (let i = 0; i < items.length; i++) {
-        if (items[i].value === 'processId' && items[i].process) {
-            const relatedProcess = await Process.findOne({ processId: items[i].process });
+        if (items[i].process === 'processId' && items[i].value) {
+            const relatedProcess = await Process.findOne({ processId: items[i].value });
 
             if (relatedProcess) {
                 // Replace the object while keeping the key
