@@ -26,12 +26,22 @@ exports.getProcessById = catchAsyncErrors( async (req, res, next) => {
     });
 });
 
+exports.getProcessByDepartmentId = catchAsyncErrors( async (req, res, next) => {
+    const processes = await Process.find({ department: req.params.id }).populate('department').populate('updatedBy', 'userName email');
+
+    res.status(200).json({
+        success: true,
+        data: processes
+    });
+})
+
 exports.createProcess = catchAsyncErrors( async (req, res, next) => {
 
-    const { process, headers, department } = req.body;
+    const { process, headers, department, processId } = req.body;
 
     const processes = await Process.create({
         process,
+        processId,
         headers,
         department,
         updatedBy: req.user._id
@@ -123,77 +133,39 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("Process not found", 404));
     }
 
-    process.data.push({ items });
+    // Loop through all items and replace those with value "processId" and a process key
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].value === 'processId' && items[i].process) {
+            const relatedProcess = await Process.findOne({ processId: items[i].process });
 
-    // if the items data value as the value of processId the another key should be added as process with the value of process as corresponded process
-    // [
-    //       { "key": "NO", "value": "1" },
-    //       { "key": "BY", "value": "John Doe" },
-    //       { "key": "FROM", "value": "Design Team" },
-    //       { "key": "DATE", "value": "2023-01-01" },
-    //       { "key": "PART", "value": "Part A" },
-    //       { "key": "SPEC", "value": "Specification A" },
-    //       { "key": "QTY", "value": "100" },
-    //       { "key": "REVIEW DATE", "value": "2023-01-10" },
-    //       { "key": "REVIEW BY", "value": "Jane Smith" },
-    //       { "key": "STATUS", "value": "In Progress" },
-    //       { "key": "UPLOAD", "value": "File.pdf" },
-    //       { "key": "PROTO", "value": "Prototype 1" },
-    //       { "key": "VALIDATION", "value": "Validated" },
-    //       { "key": "MASTER", "value": "processId", 
-    //         "process":  {
-    //           "process": "Master Piece",
-    //           "header": [
-    //             "SL.NO",
-    //             "PART",
-    //             "SERIES ",
-    //             "PART NO",
-    //             "PART NAME",
-    //             "SPECIFICATION",
-    //             "MASTER PIECE",
-    //             "REMARK"
-    //           ],
-    //           "data": [
-    //             [
-    //               { "key": "SL.NO", "value": "1" },
-    //               { "key": "PART", "value": "Part A" },
-    //               { "key": "SERIES ", "value": "Series 1" },
-    //               { "key": "PART NO", "value": "PA-001" },
-    //               { "key": "PART NAME", "value": "Part A Name" },
-    //               { "key": "SPECIFICATION", "value": "Spec A" },
-    //               { "key": "MASTER PIECE", "value": "Master Piece A" },
-    //               { "key": "REMARK", "value": "No remarks" }
-    //             ],
-    //             [
-    //               { "key": "SL.NO", "value": "2" },
-    //               { "key": "PART", "value": "Part B" },
-    //               { "key": "SERIES ", "value": "Series 1" },
-    //               { "key": "PART NO", "value": "PB-001" },
-    //               { "key": "PART NAME", "value": "Part B Name" },
-    //               { "key": "SPECIFICATION", "value": "Spec B" },
-    //               { "key": "MASTER PIECE", "value": "Master Piece B" },
-    //               { "key": "REMARK", "value": "Urgent" }
-    //             ]
-    //           ]
-    //           } }
-    //     ],
-    if (items.some(item => item.value === 'processId')) {
-        const masterProcess = await Process.findOne({ processId: process.processId });
-        if (masterProcess) {
-            items.push({ key: 'process', value: masterProcess.process });
+            if (relatedProcess) {
+                // Replace the object while keeping the key
+                items[i] = {
+                    key: items[i].key,
+                    value: `processId - ${relatedProcess._id}`,
+                    process: ''
+                };
+            }
         }
     }
 
+    // (Optional) Save the updated items back to the process if needed
+    // process.items = items;
+
+    // Add new row
+    process.data.push({ items });
+    
     await process.populate('department');
     await process.populate('updatedBy', 'userName email');
-
     await process.save();
 
     res.status(200).json({
         success: true,
-        data: process
+        process
     });
 });
+
+
 
 // UPDATE row by rowId
 exports.updateData = catchAsyncErrors(async (req, res, next) => {

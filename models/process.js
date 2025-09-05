@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const keyValueSchema = new mongoose.Schema({
     key: { type: String, required: true },
-    value: { type: String, required: true }
+    value: { type: String, required: true },
+    process: { type: String, default: "" } // optional reference to another processId
 }, { _id: false });
 
 // Schema for each row in "data"
