@@ -127,7 +127,7 @@ exports.deleteHeader = catchAsyncErrors( async (req, res, next) => {
 // ADD new row
 exports.addData = catchAsyncErrors(async (req, res, next) => {
     const process = await Process.findById(req.params.id);
-    const { items } = req.body;
+    const { items, rowDataId } = req.body;
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
@@ -149,11 +149,8 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         }
     }
 
-    // (Optional) Save the updated items back to the process if needed
-    // process.items = items;
-
     // Add new row
-    process.data.push({ items });
+    process.data.push({ items, rowDataId });
     
     await process.populate('department');
     await process.populate('updatedBy', 'userName email');

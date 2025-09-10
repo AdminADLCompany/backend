@@ -8,10 +8,14 @@ const keyValueSchema = new mongoose.Schema({
 
 // Schema for each row in "data"
 const rowSchema = new mongoose.Schema({
-  items: { type: [keyValueSchema], required: true },
+  items: { type: [keyValueSchema], required: true },    
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+  },
+  rowDataId: {
+    type: 'String',
+    default: ""
   }
 }, { timestamps: true }); // each row gets its own _id and timestamps if you want
 

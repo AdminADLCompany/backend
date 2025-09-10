@@ -34,13 +34,13 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
     name, description, status, partNo, series, image,
     portSize, bodySize, material, standard,
     operatingPressure, pressureDrop, ratedFlow,
-    sealingMaterial, suggestedFlow, temperature
+    sealingMaterial, suggestedFlow, temperature, graph
   } = req.body;
 
   if (!name || !description || !partNo || !series || !image ||
       !portSize || !bodySize || !material || !standard ||
       !operatingPressure || !pressureDrop || !ratedFlow ||
-      !sealingMaterial || !suggestedFlow || !temperature) {
+      !sealingMaterial || !suggestedFlow || !temperature || !graph) {
     return next(new ErrorHandler("Please fill all fields", 400));
   }
 
@@ -61,6 +61,7 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
     sealingMaterial,
     suggestedFlow,
     temperature,
+    graph,
     updatedBy: req.user._id  // ✅ only ObjectId
   });
 
