@@ -11,9 +11,9 @@ const {
     deleteUser
 } = require("../controllers/userController");
 
+const { isAuthenticatedUser } = require("../middleware/auth");
 
-
-router.route("/all").get(getAllUsers);
+router.route("/all").get(isAuthenticatedUser, getAllUsers);
 router.route("/register").post(registerUser);
 router.route("/login").post(loginUser);
 router.route("/logout").get(logoutUser);
