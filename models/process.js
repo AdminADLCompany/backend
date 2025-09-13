@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const historyPlugin = require('../middleware/historyPlugin');
 
 const keyValueSchema = new mongoose.Schema({
     key: { type: String, required: true },
@@ -47,5 +48,8 @@ const processSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+
+
+processSchema.plugin(historyPlugin, { collectionName: "Process" });
 
 module.exports = mongoose.model('Process', processSchema);

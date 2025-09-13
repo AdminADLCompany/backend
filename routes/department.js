@@ -10,7 +10,8 @@ const {
     updateDepartment,
     deleteDepartment,
     addProcess,
-    deleteProcess
+    deleteProcess,
+    getDepartmentHistory
 } = require('../controllers/departmentController');
 
 router.route('/all').get(getAllDepartments);
@@ -21,5 +22,7 @@ router.route('/:id').get(getDepartmentById)
 
 router.route('/process/:id').post(isAuthenticatedUser, addProcess);
 router.route('/process/:id').delete(isAuthenticatedUser, deleteProcess);
+
+router.route('/history/:id').get(isAuthenticatedUser, getDepartmentHistory);
 
 module.exports = router;

@@ -1,4 +1,6 @@
 const User = require("../models/user");
+const History = require("../models/history");
+
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const sendToken = require("../utils/jwtToken");
@@ -260,3 +262,14 @@ exports.deleteUser = catchAsyncErrors ( async (req, res, next) => {
         message: 'Account deleted successfully'
     })
 })
+
+exports.getUserHistory = catchAsyncErrors( async (req, res, next) => {
+    const history = await History.find({ 
+        updatedBy: req.user._id
+    }).populate('updatedBy', 'userName email').sort({ timestamp: -1 });
+
+    res.status(200).json({
+        success: true,
+        data: history
+    });
+});

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const historyPlugin = require('../middleware/historyPlugin');
 
 const departmentSchema = new mongoose.Schema({
     name: {
@@ -23,5 +24,7 @@ const departmentSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+departmentSchema.plugin(historyPlugin, { collectionName: "Department" });
 
 module.exports = mongoose.model("Department", departmentSchema);

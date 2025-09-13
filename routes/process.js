@@ -14,7 +14,9 @@ const {
     deleteHeader,
     addData,
     updateData,
-    deleteData
+    deleteData,
+    getaProcessHistory,
+    getProcessRowHistory
 } = require("../controllers/processController");
 
 router.route("/all").get(isAuthenticatedUser, getAllProcesses)
@@ -25,5 +27,7 @@ router.route("/headers/:id").post(isAuthenticatedUser, addHeader).delete(isAuthe
 router.route("/data/:id").post(isAuthenticatedUser, addData)
     .put(isAuthenticatedUser, updateData)
     .delete(isAuthenticatedUser, deleteData);
+router.route("/history/:id").get(isAuthenticatedUser, getaProcessHistory);
+router.route("/history/:id/:rowId").get(isAuthenticatedUser, getProcessRowHistory);
 
 module.exports = router;

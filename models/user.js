@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const historyPlugin = require("../middleware/historyPlugin");
 
 const userSchema = mongoose.Schema({
     userName: {
@@ -76,5 +77,7 @@ userSchema.methods.getResetPasswordToken = function () {
 
     return resetToken
 }
+
+userSchema.plugin(historyPlugin, { collectionName: "User" });
 
 module.exports = mongoose.model("User", userSchema);
