@@ -3,21 +3,6 @@ const History = require('../models/history');
 
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
-const cloudinary = require("../config/cloudinary");
-
-const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE"];
-
-// Helper to convert object to items array
-const formatItemsArray = (obj) => {
-    return Object.entries(obj).map(([key, value]) => {
-        if (typeof value === 'object' && value !== null && value.file) {
-            return { key, value, process: 'image' };
-        }
-        // default to 'value' process type if not specified
-        return { key, value, process: 'value' };
-    });
-};
-
 
 exports.getAllProcesses = catchAsyncErrors( async (req, res, next) => {
     // populate process and updatedBy
@@ -148,19 +133,13 @@ exports.deleteHeader = catchAsyncErrors( async (req, res, next) => {
 
 // ADD new row
 exports.addData = catchAsyncErrors(async (req, res, next) => {
-
+    
     const process = await Process.findById(req.params.id);
-    let { items, rowDataId } = req.body;
+    const { items, rowDataId } = req.body;
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
     }
-
-    // if (typeof items === "string") {
-    //     items = JSON.parse(items); // ✅ convert string to array
-    // }
-
-    if (!Array.isArray(items)) items = formatItemsArray(items);
 
     // ---- Rework Sync Logic for Action Taken ----
     if (process.processId === 'MR/R/003B') {
@@ -204,35 +183,6 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         }
     }
 
-    for (let i = 0; i < items.length; i++) {
-    if (items[i].process === "image") {
-        let uploadedUrl = "";
-
-        // Case 1: file from multer (multipart/form-data)
-        if (req.files && req.files[items[i].key]) {
-            const file = req.files[items[i].key][0];
-            const result = await cloudinary.uploader.upload(file.path, {
-                folder: "process_images"
-            });
-            uploadedUrl = result.secure_url;
-        }
-        // Case 2: base64 string from frontend
-        else if (items[i].value?.file?.base64) {
-            const result = await cloudinary.uploader.upload(items[i].value.file.base64, {
-                folder: "process_images"
-            });
-            uploadedUrl = result.secure_url;
-        }
-        // Case 3: fallback to previewUrl (if no upload done)
-        else {
-            uploadedUrl = items[i].value?.previewUrl || "";
-        }
-
-        items[i].value = uploadedUrl;
-    }
-}
-
-
     // ---- Your Existing Logic ----
     for (let i = 0; i < items.length; i++) {
         if (items[i].process === 'processId' && items[i].value) {
@@ -273,16 +223,8 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
 
 // UPDATE row by rowId
 exports.updateData = catchAsyncErrors(async (req, res, next) => {
-
     const process = await Process.findById(req.params.id);
-    let { rowId, items } = req.body;
-
-    // if (typeof items === "string") {
-    //     items = JSON.parse(items); // ✅ convert string to array
-    // }
-
-    if (!Array.isArray(items)) items = formatItemsArray(items);
-
+    const { rowId, items } = req.body;
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
@@ -294,36 +236,6 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     }
 
     const oldData = { ...row.toObject() };
-
-    for (let i = 0; i < items.length; i++) {
-        if (items[i].process === 'image') {
-            const file = items[i].value.file || (req.files && req.files[items[i].key]?.[0]);
-            if (file && file.path) {
-                const result = await cloudinary.uploader.upload(file.path, {
-                    folder: "process_images"
-                });
-                items[i].value = result.secure_url;
-            } else {
-                // fallback to previewUrl if no file
-                items[i].value = items[i].value.previewUrl || '';
-            }
-        }
-    }
-
-    for (let i = 0; i < items.length; i++) {
-        if (items[i].process === 'processId' && items[i].value) {
-            const relatedProcess = await Process.findOne({ processId: items[i].value });
-
-            if (relatedProcess) {
-                items[i] = {
-                    key: items[i].key,
-                    value: `processId - ${relatedProcess._id}`,
-                    process: ''
-                };
-            }
-        }
-    }
-
     row.items = items;
     process.updatedBy = req.user._id;
     await process.save();
