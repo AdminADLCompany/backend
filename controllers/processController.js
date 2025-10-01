@@ -205,19 +205,33 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     }
 
     for (let i = 0; i < items.length; i++) {
-        if (items[i].process === 'image') {
-            const file = items[i].value.file || (req.files && req.files[items[i].key]?.[0]);
-            if (file && file.path) {
-                const result = await cloudinary.uploader.upload(file.path, {
-                    folder: "process_images"
-                });
-                items[i].value = result.secure_url;
-            } else {
-                // fallback to previewUrl if no file
-                items[i].value = items[i].value.previewUrl || '';
-            }
+    if (items[i].process === "image") {
+        let uploadedUrl = "";
+
+        // Case 1: file from multer (multipart/form-data)
+        if (req.files && req.files[items[i].key]) {
+            const file = req.files[items[i].key][0];
+            const result = await cloudinary.uploader.upload(file.path, {
+                folder: "process_images"
+            });
+            uploadedUrl = result.secure_url;
         }
+        // Case 2: base64 string from frontend
+        else if (items[i].value?.file?.base64) {
+            const result = await cloudinary.uploader.upload(items[i].value.file.base64, {
+                folder: "process_images"
+            });
+            uploadedUrl = result.secure_url;
+        }
+        // Case 3: fallback to previewUrl (if no upload done)
+        else {
+            uploadedUrl = items[i].value?.previewUrl || "";
+        }
+
+        items[i].value = uploadedUrl;
     }
+}
+
 
     // ---- Your Existing Logic ----
     for (let i = 0; i < items.length; i++) {
@@ -267,9 +281,8 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     //     items = JSON.parse(items); // ✅ convert string to array
     // }
 
-    if (!Array.isArray(items)) {
-        return next(new ErrorHandler("Items must be an array of objects", 400));
-    }
+    if (!Array.isArray(items)) items = formatItemsArray(items);
+
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
@@ -284,15 +297,15 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
 
     for (let i = 0; i < items.length; i++) {
         if (items[i].process === 'image') {
-            const file = items[i].value?.file || (req.files && req.files[items[i].key]?.[0]);
+            const file = items[i].value.file || (req.files && req.files[items[i].key]?.[0]);
             if (file && file.path) {
                 const result = await cloudinary.uploader.upload(file.path, {
                     folder: "process_images"
                 });
                 items[i].value = result.secure_url;
             } else {
-                // fallback to previewUrl if no file object
-                items[i].value = items[i].value?.previewUrl || '';
+                // fallback to previewUrl if no file
+                items[i].value = items[i].value.previewUrl || '';
             }
         }
     }
