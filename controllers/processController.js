@@ -140,13 +140,54 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("Process not found", 404));
     }
 
-    // Loop through all items and replace those with value "processId" and a process key
+    // ---- Rework Sync Logic for Action Taken ----
+    if (process.processId === 'MR/R/003B') {
+        const moveToItem = items.find(i => i.key === "MOVE TO");
+        if (moveToItem && moveToItem.value === "Rework") {
+            // find rejection row by rowDataId
+            const rejectionProcess = await Process.findOne({ processId: "MR/R/003" });
+            const rejectionRow = rejectionProcess?.data.id(rowDataId);
+
+            if (rejectionRow) {
+                const partNo = rejectionRow.items.find(i => i.key === "PART NO")?.value;
+                const partName = rejectionRow.items.find(i => i.key === "PART NAME")?.value;
+                const problemDesc = rejectionRow.items.find(i => i.key === "PROBLEM DESCRIPTION")?.value;
+                const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
+                const rejectQty = rejectionRow.items.find(i => i.key === "REJECT QTY")?.value || 0;
+
+                const actionPlan = items.find(i => i.key === "ACTION PLAN")?.value;
+                const verifiedBy = items.find(i => i.key === "VERIFIED BY")?.value;
+                const status = items.find(i => i.key === "ACTION PLAN STATUS")?.value;
+
+                const reworkProcess = await Process.findOne({ processId: "MR/R/003A" });
+                if (reworkProcess) {
+                    const reworkRow = {
+                        items: [
+                            { key: "PART NO", value: partNo, process: "value" },
+                            { key: "PART NAME", value: partName, process: "value" },
+                            { key: "PROBLEM DESCRIPTION", value: problemDesc, process: "value" },
+                            { key: "REWORK QTY", value: rejectQty, process: "value" },
+                            { key: "REJECT STAGE", value: rejectStage, process: "value" },
+                            { key: "ACTION PLAN", value: actionPlan, process: "value" },
+                            { key: "VERIFIED BY", value: verifiedBy, process: "value" },
+                            { key: "STATUS", value: status, process: "value" }
+                        ],
+                        rowDataId
+                    };
+                    reworkProcess.data.push(reworkRow);
+                    reworkProcess.updatedBy = req.user._id;
+                    await reworkProcess.save();
+                }
+            }
+        }
+    }
+
+    // ---- Your Existing Logic ----
     for (let i = 0; i < items.length; i++) {
         if (items[i].process === 'processId' && items[i].value) {
             const relatedProcess = await Process.findOne({ processId: items[i].value });
 
             if (relatedProcess) {
-                // Replace the object while keeping the key
                 items[i] = {
                     key: items[i].key,
                     value: `processId - ${relatedProcess._id}`,
@@ -166,7 +207,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     await History.create({
         collectionName: "Process",
         documentId: process._id,
-        rowId: process.data[process.data.length - 1]._id, // newly added row
+        rowId: process.data[process.data.length - 1]._id,
         operation: "create",
         oldData: null,
         newData: newRow,
@@ -197,6 +238,61 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     row.items = items;
     process.updatedBy = req.user._id;
     await process.save();
+
+    /** 🔥 Extra logic for Action Taken process */
+    if (process.processId === "MR/R/003B") {
+        const moveToItem = items.find(i => i.key === "MOVE TO");
+
+        if (moveToItem && moveToItem.value === "Rework") {
+            // find linked rejection report row
+            const rejectionReport = await Process.findOne({ processId: "MR/R/003" });
+            const reworkReport = await Process.findOne({ processId: "MR/R/003A" });
+
+            // console log the boolean value of both reports
+            console.log("Case Succeeded: ", !!rejectionReport, !!reworkReport);
+
+            if (rejectionReport && reworkReport) {
+                // get rejection row using rowDataId
+                const rejectionRow = rejectionReport.data.id(row.rowDataId);
+
+                if (rejectionRow) {
+                    const partNo = rejectionRow.items.find(i => i.key === "PART NO")?.value;
+                    const partName = rejectionRow.items.find(i => i.key === "PART NAME")?.value;
+                    const problemDesc = rejectionRow.items.find(i => i.key === "PROBLEM DESCRIPTION")?.value;
+                    const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
+
+                    // prepare new rework row
+                    const reworkRow = {
+                        items: [
+                            { key: "PART NO", value: partNo || "", process: "value" },
+                            { key: "PART NAME", value: partName || "", process: "value" },
+                            { key: "PROBLEM DESCRIPTION", value: problemDesc || "", process: "value" },
+                            { key: "REWORK QTY", value: "0", process: "value" }, // default until user edits
+                            { key: "REJECT STAGE", value: rejectStage || "", process: "value" },
+                            { key: "ACTION PLAN", value: items.find(i => i.key === "ACTION PLAN")?.value || "", process: "value" },
+                            { key: "VERIFIED BY", value: items.find(i => i.key === "VERIFIED BY")?.value || "", process: "value" },
+                            { key: "STATUS", value: items.find(i => i.key === "ACTION PLAN STATUS")?.value || "", process: "value" },
+                        ],
+                        rowDataId: row.rowDataId, // 🔗 link with same rejection row
+                    };
+
+                    reworkReport.data.push(reworkRow);
+                    reworkReport.updatedBy = req.user._id;
+                    await reworkReport.save();
+
+                    await History.create({
+                        collectionName: "Process",
+                        documentId: reworkReport._id,
+                        rowId: reworkReport.data[reworkReport.data.length - 1]._id,
+                        operation: "create",
+                        oldData: null,
+                        newData: reworkRow,
+                        changedBy: req.user._id
+                    });
+                }
+            }
+        }
+    }
 
     await History.create({
         collectionName: "Process",
@@ -252,7 +348,6 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
         data: process
     });
 });
-
 
 exports.getaProcessHistory = catchAsyncErrors( async (req, res, next) => {
     const history = await History.find({ 
