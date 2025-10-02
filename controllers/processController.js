@@ -5,7 +5,7 @@ const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const cloudinary = require("../config/cloudinary");
 
-const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT"];
+const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT", "NPD FORM"];
 
 exports.getAllProcesses = catchAsyncErrors( async (req, res, next) => {
     // populate process and updatedBy
