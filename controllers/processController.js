@@ -3,6 +3,9 @@ const History = require('../models/history');
 
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
+const cloudinary = require("../config/cloudinary");
+
+const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE"];
 
 exports.getAllProcesses = catchAsyncErrors( async (req, res, next) => {
     // populate process and updatedBy
@@ -133,12 +136,16 @@ exports.deleteHeader = catchAsyncErrors( async (req, res, next) => {
 
 // ADD new row
 exports.addData = catchAsyncErrors(async (req, res, next) => {
-    
+
     const process = await Process.findById(req.params.id);
-    const { items, rowDataId } = req.body;
+    let { items, rowDataId } = req.body;
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
+    }
+
+    if (typeof items === "string") {
+        items = JSON.parse(items); // ✅ convert string to array
     }
 
     // ---- Rework Sync Logic for Action Taken ----
@@ -183,6 +190,16 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         }
     }
 
+    for (let i = 0; i < items.length; i++) {
+        if (ImageUploadArray.includes(items[i].key) && req.files && req.files[items[i].key]) {
+            const file = req.files[items[i].key][0]; // multer saves array for each key
+            const result = await cloudinary.uploader.upload(file.path, {
+                folder: "process_images"
+            });
+            items[i].value = result.secure_url; // store cloudinary URL
+        }
+    }
+
     // ---- Your Existing Logic ----
     for (let i = 0; i < items.length; i++) {
         if (items[i].process === 'processId' && items[i].value) {
@@ -223,8 +240,13 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
 
 // UPDATE row by rowId
 exports.updateData = catchAsyncErrors(async (req, res, next) => {
+
     const process = await Process.findById(req.params.id);
-    const { rowId, items } = req.body;
+    let { rowId, items } = req.body;
+
+    if (typeof items === "string") {
+        items = JSON.parse(items); // ✅ convert string to array
+    }
 
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
@@ -236,6 +258,17 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     }
 
     const oldData = { ...row.toObject() };
+
+    for (let i = 0; i < items.length; i++) {
+        if (ImageUploadArray.includes(items[i].key) && req.files && req.files[items[i].key]) {
+            const file = req.files[items[i].key][0];
+            const result = await cloudinary.uploader.upload(file.path, {
+                folder: "process_images"
+            });
+            items[i].value = result.secure_url;
+        }
+    }
+
     row.items = items;
     process.updatedBy = req.user._id;
     await process.save();
