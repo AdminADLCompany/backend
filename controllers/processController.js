@@ -138,6 +138,8 @@ exports.deleteHeader = catchAsyncErrors( async (req, res, next) => {
 exports.addData = catchAsyncErrors(async (req, res, next) => {
 
     const process = await Process.findById(req.params.id);
+    console.log("REQ BODY:", req.body);
+console.log("REQ FILES:", req.files);
     let { items, rowDataId } = req.body;
 
     if (!process) {
