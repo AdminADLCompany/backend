@@ -138,8 +138,6 @@ exports.deleteHeader = catchAsyncErrors( async (req, res, next) => {
 exports.addData = catchAsyncErrors(async (req, res, next) => {
 
     const process = await Process.findById(req.params.id);
-    console.log("REQ BODY:", req.body);
-console.log("REQ FILES:", req.files);
     let { items, rowDataId } = req.body;
 
     if (!process) {
@@ -188,6 +186,39 @@ console.log("REQ FILES:", req.files);
                     reworkProcess.updatedBy = req.user._id;
                     await reworkProcess.save();
                 }
+            }
+        }
+    } else if (process.processId === 'MS/R/005') {
+        const moveToItem = items.find(i => i.key === "QL STATUS");
+        if (moveToItem && moveToItem.value === "OPEN") {
+            const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+            if (orderListProcess) {
+                const orderListRow = {
+                    items: [
+                        { key: "DATE", value: items.find(i => i.key === "DATE")?.value, process: "value" },
+                        { key: "QUOTE NO", value: items.find(i => i.key === "QUOTATION NO")?.value, process: "value" },
+                        { key: "ENQ BY", value: items.find(i => i.key === "ENQ BY")?.value, process: "value" },
+                        { key: "CUSTOMER NAME", value: items.find(i => i.key === "CUSTOMER NAME")?.value, process: "value" },
+                        { key: "LOCATION", value: items.find(i => i.key === "LOCATION")?.value, process: "value" },
+                        { key: "DESCRIPTION", value: items.find(i => i.key === "DESCRIPTION")?.value, process: "value" },
+                        { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
+                        { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
+                        { key: "VALUE", value: '', process: "value" },
+                        { key: "ORDER DATE", value: '', process: "value" },
+                        { key: "PO NO", value: '', process: "value" },
+                        { key: "LEAD TIME", value: '', process: "value" },
+                        { key: "INVOICE NO", value: '', process: "value" },
+                        { key: "DELIVERY QTY", value: '', process: "value" },
+                        { key: "PENDING QTY", value: '', process: "value" },
+                        { key: "DELIVERY DATE", value: '', process: "value" },
+                        { key: "GRN", value: '', process: "value" },
+                        { key: "PAYMENT", value: '', process: "value" }
+                    ],
+                    rowDataId
+                };
+                orderListProcess.data.push(orderListRow);
+                orderListProcess.updatedBy = req.user._id;
+                await orderListProcess.save();
             }
         }
     }
@@ -242,12 +273,12 @@ console.log("REQ FILES:", req.files);
 
 // UPDATE row by rowId
 exports.updateData = catchAsyncErrors(async (req, res, next) => {
-
     const process = await Process.findById(req.params.id);
     let { rowId, items } = req.body;
 
+    // Parse items if it's a string
     if (typeof items === "string") {
-        items = JSON.parse(items); // ✅ convert string to array
+        items = JSON.parse(items);
     }
 
     if (!process) {
@@ -271,6 +302,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         }
     }
 
+    // Update row data
     row.items = items;
     process.updatedBy = req.user._id;
     await process.save();
@@ -280,15 +312,10 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         const moveToItem = items.find(i => i.key === "MOVE TO");
 
         if (moveToItem && moveToItem.value === "Rework") {
-            // find linked rejection report row
             const rejectionReport = await Process.findOne({ processId: "MR/R/003" });
             const reworkReport = await Process.findOne({ processId: "MR/R/003A" });
 
-            // console log the boolean value of both reports
-            console.log("Case Succeeded: ", !!rejectionReport, !!reworkReport);
-
             if (rejectionReport && reworkReport) {
-                // get rejection row using rowDataId
                 const rejectionRow = rejectionReport.data.id(row.rowDataId);
 
                 if (rejectionRow) {
@@ -297,25 +324,26 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
                     const problemDesc = rejectionRow.items.find(i => i.key === "PROBLEM DESCRIPTION")?.value;
                     const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
 
-                    // prepare new rework row
+                    // Prepare new rework row
                     const reworkRow = {
                         items: [
                             { key: "PART NO", value: partNo || "", process: "value" },
                             { key: "PART NAME", value: partName || "", process: "value" },
                             { key: "PROBLEM DESCRIPTION", value: problemDesc || "", process: "value" },
-                            { key: "REWORK QTY", value: "0", process: "value" }, // default until user edits
+                            { key: "REWORK QTY", value: "0", process: "value" }, // default
                             { key: "REJECT STAGE", value: rejectStage || "", process: "value" },
                             { key: "ACTION PLAN", value: items.find(i => i.key === "ACTION PLAN")?.value || "", process: "value" },
                             { key: "VERIFIED BY", value: items.find(i => i.key === "VERIFIED BY")?.value || "", process: "value" },
                             { key: "STATUS", value: items.find(i => i.key === "ACTION PLAN STATUS")?.value || "", process: "value" },
                         ],
-                        rowDataId: row.rowDataId, // 🔗 link with same rejection row
+                        rowDataId: row.rowDataId, // 🔗 link to rejection row
                     };
 
                     reworkReport.data.push(reworkRow);
                     reworkReport.updatedBy = req.user._id;
                     await reworkReport.save();
 
+                    // Log to history
                     await History.create({
                         collectionName: "Process",
                         documentId: reworkReport._id,
@@ -328,8 +356,46 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
                 }
             }
         }
+    } else if (process.processId === "MS/R/005") {
+        const moveToItem = items.find(i => i.key === "QL STATUS");
+
+        if (moveToItem && moveToItem.value === "OPEN") {
+            const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+
+            if (orderListProcess) {
+                const orderListRow = {
+                    items: [
+                        { key: "DATE", value: items.find(i => i.key === "DATE")?.value, process: "value" },
+                        { key: "QUOTE NO", value: items.find(i => i.key === "QUOTATION NO")?.value, process: "value" },
+                        { key: "ENQ BY", value: items.find(i => i.key === "ENQ BY")?.value, process: "value" },
+                        { key: "CUSTOMER NAME", value: items.find(i => i.key === "CUSTOMER NAME")?.value, process: "value" },
+                        { key: "LOCATION", value: items.find(i => i.key === "LOCATION")?.value, process: "value" },
+                        { key: "DESCRIPTION", value: items.find(i => i.key === "DESCRIPTION")?.value, process: "value" },
+                        { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
+                        { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
+                        { key: "VALUE", value: '', process: "value" },
+                        { key: "ORDER DATE", value: '', process: "value" },
+                        { key: "PO NO", value: '', process: "value" },
+                        { key: "LEAD TIME", value: '', process: "value" },
+                        { key: "INVOICE NO", value: '', process: "value" },
+                        { key: "DELIVERY QTY", value: '', process: "value" },
+                        { key: "PENDING QTY", value: '', process: "value" },
+                        { key: "DELIVERY DATE", value: '', process: "value" },
+                        { key: "GRN", value: '', process: "value" },
+                        { key: "PAYMENT", value: '', process: "value" }
+                    ]
+                };
+
+                orderListProcess.data.push(orderListRow);
+                orderListProcess.updatedBy = req.user._id;
+                await orderListProcess.save();
+            }
+        }
     }
 
+    console.log(process.processId);
+
+    // Save history for main process update
     await History.create({
         collectionName: "Process",
         documentId: process._id,
@@ -345,6 +411,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         data: process
     });
 });
+
 
 // DELETE row by rowId
 exports.deleteData = catchAsyncErrors(async (req, res, next) => {
