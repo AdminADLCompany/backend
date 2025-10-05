@@ -5,7 +5,7 @@ const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const cloudinary = require("../config/cloudinary");
 
-const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT", "NPD FORM"];
+const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT", "NPD FORM", "EVALUATE"];
 
 exports.getAllProcesses = catchAsyncErrors( async (req, res, next) => {
     // populate process and updatedBy
@@ -221,6 +221,45 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
                 await orderListProcess.save();
             }
         }
+    } else if (process.processId === 'PR/R/003') {
+        const inspectionProcess = await Process.findOne({ processId: "QA/R/003" });
+        if (inspectionProcess) {
+            const inspectionRow = {
+                items: [
+                    { key: "PART NO", value: items.find(i => i.key === "PART NO")?.value, process: "value" },
+                    { key: "PART NAME", value: items.find(i => i.key === "PART NAME")?.value, process: "value" },
+                    { key: "ITEM CATEGORY", value: items.find(i => i.key === "ITEM CATEGORY")?.value, process: "value" },
+                    { key: "ITEM CODE", value: items.find(i => i.key === "ITEM CODE")?.value, process: "value" },
+                    { key: "ITEM NAME", value: items.find(i => i.key === "ITEM NAME")?.value, process: "value" },
+                    { key: "GRADE", value: items.find(i => i.key === "GRADE")?.value, process: "value" },
+                    { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
+                    { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
+                    { key: "VENDOR NAME", value: items.find(i => i.key === "VENDOR NAME")?.value, process: "value" },
+                    { key: 'INVOICE NO', value: '', process: "value" },
+                    { key: 'DELIVER DATE', value: '', process: "date" },
+                    { key: 'QTY', value: '', process: "value" },
+                    { key: 'QUALITY INSPECTION', value: 'QA/R/003A', process: "processId" },
+                    { key: 'INSPECTION-STATUS', value: '', process: "select" },
+                ],
+                rowDataId
+            };
+
+            for (let i = 0; i < items.length; i++) {
+                const relatedProcess = await Process.findOne({ processId: items[i].value });
+
+                if (relatedProcess && relatedProcess._id) {
+                    items[i] = {
+                        key: items[i].key,
+                        value: `processId - ${relatedProcess._id}`,
+                        process: ''
+                    };
+                }
+            }
+
+            inspectionProcess.data.push(inspectionRow);
+            inspectionProcess.updatedBy = req.user._id;
+            await inspectionProcess.save();
+        }
     }
 
     for (let i = 0; i < items.length; i++) {
@@ -238,7 +277,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         if (items[i].process === 'processId' && items[i].value) {
             const relatedProcess = await Process.findOne({ processId: items[i].value });
 
-            if (relatedProcess) {
+            if (relatedProcess && relatedProcess._id) {
                 items[i] = {
                     key: items[i].key,
                     value: `processId - ${relatedProcess._id}`,
@@ -264,6 +303,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         newData: newRow,
         changedBy: req.user._id
     });
+
 
     res.status(200).json({
         success: true,
@@ -393,8 +433,6 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         }
     }
 
-    console.log(process.processId);
-
     // Save history for main process update
     await History.create({
         collectionName: "Process",
@@ -411,7 +449,6 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         data: process
     });
 });
-
 
 // DELETE row by rowId
 exports.deleteData = catchAsyncErrors(async (req, res, next) => {
