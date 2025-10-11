@@ -35,7 +35,8 @@ router.route("/data/:id").post(
         { name: 'CALIBRATION CERTIFICATE NO / DATE', maxCount: 1 },
         { name: 'ACTION REPORT', maxCount: 1 },
         { name: 'NPD FORM', maxCount: 1 },
-        { name: "EVALUATE", maxCount: 1 }
+        { name: "EVALUATE", maxCount: 1 },
+        { name: "IMAGE", maxCount: 1 }
     ]),
     addData)
     .put(
@@ -47,7 +48,8 @@ router.route("/data/:id").post(
             { name: 'CALIBRATION CERTIFICATE NO / DATE', maxCount: 1 },
             { name: 'ACTION REPORT', maxCount: 1 },
             { name: 'NPD FORM', maxCount: 1 },
-            { name: "EVALUATE", maxCount: 1 }
+            { name: "EVALUATE", maxCount: 1 },
+            { name: "IMAGE", maxCount: 1 }
         ]),
         updateData)
     .delete(isAuthenticatedUser, deleteData);
