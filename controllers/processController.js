@@ -163,7 +163,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
                 const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
                 const rejectQty = rejectionRow.items.find(i => i.key === "REJECT QTY")?.value || 0;
 
-                const actionPlan = items.find(i => i.key === "ACTION PLAN")?.value;
+                const actionPlan = items.find(i => i.key === "ACTION PLANNING")?.value;
                 const verifiedBy = items.find(i => i.key === "VERIFIED BY")?.value;
                 const status = items.find(i => i.key === "ACTION PLAN STATUS")?.value;
 
