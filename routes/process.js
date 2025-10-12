@@ -17,10 +17,13 @@ const {
     updateData,
     deleteData,
     getaProcessHistory,
-    getProcessRowHistory
+    getProcessRowHistory,
+    getProductDetails
 } = require("../controllers/processController");
 
 router.route("/all").get(isAuthenticatedUser, getAllProcesses)
+router.route("/search").get(isAuthenticatedUser, getProductDetails);
+
 router.route("/create").post(isAuthenticatedUser, createProcess);
 router.route("/department/:id").get(isAuthenticatedUser, getProcessByDepartmentId);
 router.route("/:id").get(isAuthenticatedUser, getProcessById).put(isAuthenticatedUser, updateProcess).delete(isAuthenticatedUser, deleteProcess);

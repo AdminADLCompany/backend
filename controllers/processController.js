@@ -4,6 +4,7 @@ const History = require('../models/history');
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const cloudinary = require("../config/cloudinary");
+const { handleAddIntersection, handleUpdateIntersection} = require("../utils/intersections");
 
 const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT", "NPD FORM", "EVALUATE", "IMAGE"];
 
@@ -148,119 +149,121 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         items = JSON.parse(items); // ✅ convert string to array
     }
 
-    // ---- Rework Sync Logic for Action Taken ----
-    if (process.processId === 'MR/R/003B') {
-        const moveToItem = items.find(i => i.key === "MOVE TO");
-        if (moveToItem && moveToItem.value === "Rework") {
-            // find rejection row by rowDataId
-            const rejectionProcess = await Process.findOne({ processId: "MR/R/003" });
-            const rejectionRow = rejectionProcess?.data.id(rowDataId);
+    // // ---- Rework Sync Logic for Action Taken ----
+    // if (process.processId === 'MR/R/003B') {
+    //     const moveToItem = items.find(i => i.key === "MOVE TO");
+    //     if (moveToItem && moveToItem.value === "Rework") {
+    //         // find rejection row by rowDataId
+    //         const rejectionProcess = await Process.findOne({ processId: "MR/R/003" });
+    //         const rejectionRow = rejectionProcess?.data.id(rowDataId);
 
-            if (rejectionRow) {
-                const partNo = rejectionRow.items.find(i => i.key === "PART NO")?.value;
-                const partName = rejectionRow.items.find(i => i.key === "PART NAME")?.value;
-                const problemDesc = rejectionRow.items.find(i => i.key === "PROBLEM DESCRIPTION")?.value;
-                const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
-                const rejectQty = rejectionRow.items.find(i => i.key === "REJECT QTY")?.value || 0;
+    //         if (rejectionRow) {
+    //             const partNo = rejectionRow.items.find(i => i.key === "PART NO")?.value;
+    //             const partName = rejectionRow.items.find(i => i.key === "PART NAME")?.value;
+    //             const problemDesc = rejectionRow.items.find(i => i.key === "PROBLEM DESCRIPTION")?.value;
+    //             const rejectStage = rejectionRow.items.find(i => i.key === "REJECT STAGE")?.value;
+    //             const rejectQty = rejectionRow.items.find(i => i.key === "REJECT QTY")?.value || 0;
 
-                const actionPlan = items.find(i => i.key === "ACTION PLANNING")?.value;
-                const verifiedBy = items.find(i => i.key === "VERIFIED BY")?.value;
-                const status = items.find(i => i.key === "ACTION PLAN STATUS")?.value;
+    //             const actionPlan = items.find(i => i.key === "ACTION PLANNING")?.value;
+    //             const verifiedBy = items.find(i => i.key === "VERIFIED BY")?.value;
+    //             const status = items.find(i => i.key === "ACTION PLAN STATUS")?.value;
 
-                const reworkProcess = await Process.findOne({ processId: "MR/R/003A" });
-                if (reworkProcess) {
-                    const reworkRow = {
-                        items: [
-                            { key: "PART NO", value: partNo, process: "value" },
-                            { key: "PART NAME", value: partName, process: "value" },
-                            { key: "PROBLEM DESCRIPTION", value: problemDesc, process: "value" },
-                            { key: "REWORK QTY", value: rejectQty, process: "value" },
-                            { key: "REJECT STAGE", value: rejectStage, process: "value" },
-                            { key: "ACTION PLAN", value: actionPlan, process: "value" },
-                            { key: "VERIFIED BY", value: verifiedBy, process: "value" },
-                            { key: "STATUS", value: status, process: "value" }
-                        ],
-                        rowDataId
-                    };
-                    reworkProcess.data.push(reworkRow);
-                    reworkProcess.updatedBy = req.user._id;
-                    await reworkProcess.save();
-                }
-            }
-        }
-    } else if (process.processId === 'MS/R/005') {
-        const moveToItem = items.find(i => i.key === "QL STATUS");
-        if (moveToItem && moveToItem.value === "OPEN") {
-            const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
-            if (orderListProcess) {
-                const orderListRow = {
-                    items: [
-                        { key: "DATE", value: items.find(i => i.key === "DATE")?.value, process: "value" },
-                        { key: "QUOTE NO", value: items.find(i => i.key === "QUOTATION NO")?.value, process: "value" },
-                        { key: "ENQ BY", value: items.find(i => i.key === "ENQ BY")?.value, process: "value" },
-                        { key: "CUSTOMER NAME", value: items.find(i => i.key === "CUSTOMER NAME")?.value, process: "value" },
-                        { key: "LOCATION", value: items.find(i => i.key === "LOCATION")?.value, process: "value" },
-                        { key: "DESCRIPTION", value: items.find(i => i.key === "DESCRIPTION")?.value, process: "value" },
-                        { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
-                        { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
-                        { key: "VALUE", value: '', process: "value" },
-                        { key: "ORDER DATE", value: '', process: "value" },
-                        { key: "PO NO", value: '', process: "value" },
-                        { key: "LEAD TIME", value: '', process: "value" },
-                        { key: "INVOICE NO", value: '', process: "value" },
-                        { key: "DELIVERY QTY", value: '', process: "value" },
-                        { key: "PENDING QTY", value: '', process: "value" },
-                        { key: "DELIVERY DATE", value: '', process: "value" },
-                        { key: "GRN", value: '', process: "value" },
-                        { key: "PAYMENT", value: '', process: "value" }
-                    ],
-                    rowDataId
-                };
-                orderListProcess.data.push(orderListRow);
-                orderListProcess.updatedBy = req.user._id;
-                await orderListProcess.save();
-            }
-        }
-    } else if (process.processId === 'PR/R/003') {
-        const inspectionProcess = await Process.findOne({ processId: "QA/R/003" });
-        if (inspectionProcess) {
-            const inspectionRow = {
-                items: [
-                    { key: "PART NO", value: items.find(i => i.key === "PART NO")?.value, process: "value" },
-                    { key: "PART NAME", value: items.find(i => i.key === "PART NAME")?.value, process: "value" },
-                    { key: "ITEM CATEGORY", value: items.find(i => i.key === "ITEM CATEGORY")?.value, process: "value" },
-                    { key: "ITEM CODE", value: items.find(i => i.key === "ITEM CODE")?.value, process: "value" },
-                    { key: "ITEM NAME", value: items.find(i => i.key === "ITEM NAME")?.value, process: "value" },
-                    { key: "GRADE", value: items.find(i => i.key === "GRADE")?.value, process: "value" },
-                    { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
-                    { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
-                    { key: "VENDOR NAME", value: items.find(i => i.key === "VENDOR NAME")?.value, process: "value" },
-                    { key: 'INVOICE NO', value: '', process: "value" },
-                    { key: 'DELIVER DATE', value: '', process: "date" },
-                    { key: 'QTY', value: '', process: "value" },
-                    { key: 'QUALITY INSPECTION', value: 'QA/R/003A', process: "processId" },
-                    { key: 'INSPECTION-STATUS', value: '', process: "select" },
-                ],
-                rowDataId
-            };
+    //             const reworkProcess = await Process.findOne({ processId: "MR/R/003A" });
+    //             if (reworkProcess) {
+    //                 const reworkRow = {
+    //                     items: [
+    //                         { key: "PART NO", value: partNo, process: "value" },
+    //                         { key: "PART NAME", value: partName, process: "value" },
+    //                         { key: "PROBLEM DESCRIPTION", value: problemDesc, process: "value" },
+    //                         { key: "REWORK QTY", value: rejectQty, process: "value" },
+    //                         { key: "REJECT STAGE", value: rejectStage, process: "value" },
+    //                         { key: "ACTION PLAN", value: actionPlan, process: "value" },
+    //                         { key: "VERIFIED BY", value: verifiedBy, process: "value" },
+    //                         { key: "STATUS", value: status, process: "value" }
+    //                     ],
+    //                     rowDataId
+    //                 };
+    //                 reworkProcess.data.push(reworkRow);
+    //                 reworkProcess.updatedBy = req.user._id;
+    //                 await reworkProcess.save();
+    //             }
+    //         }
+    //     }
+    // } else if (process.processId === 'MS/R/005') {
+    //     const moveToItem = items.find(i => i.key === "QL STATUS");
+    //     if (moveToItem && moveToItem.value === "OPEN") {
+    //         const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+    //         if (orderListProcess) {
+    //             const orderListRow = {
+    //                 items: [
+    //                     { key: "DATE", value: items.find(i => i.key === "DATE")?.value, process: "value" },
+    //                     { key: "QUOTE NO", value: items.find(i => i.key === "QUOTATION NO")?.value, process: "value" },
+    //                     { key: "ENQ BY", value: items.find(i => i.key === "ENQ BY")?.value, process: "value" },
+    //                     { key: "CUSTOMER NAME", value: items.find(i => i.key === "CUSTOMER NAME")?.value, process: "value" },
+    //                     { key: "LOCATION", value: items.find(i => i.key === "LOCATION")?.value, process: "value" },
+    //                     { key: "DESCRIPTION", value: items.find(i => i.key === "DESCRIPTION")?.value, process: "value" },
+    //                     { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
+    //                     { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
+    //                     { key: "VALUE", value: '', process: "value" },
+    //                     { key: "ORDER DATE", value: '', process: "value" },
+    //                     { key: "PO NO", value: '', process: "value" },
+    //                     { key: "LEAD TIME", value: '', process: "value" },
+    //                     { key: "INVOICE NO", value: '', process: "value" },
+    //                     { key: "DELIVERY QTY", value: '', process: "value" },
+    //                     { key: "PENDING QTY", value: '', process: "value" },
+    //                     { key: "DELIVERY DATE", value: '', process: "value" },
+    //                     { key: "GRN", value: '', process: "value" },
+    //                     { key: "PAYMENT", value: '', process: "value" }
+    //                 ],
+    //                 rowDataId
+    //             };
+    //             orderListProcess.data.push(orderListRow);
+    //             orderListProcess.updatedBy = req.user._id;
+    //             await orderListProcess.save();
+    //         }
+    //     }
+    // } else if (process.processId === 'PR/R/003') {
+    //     const inspectionProcess = await Process.findOne({ processId: "QA/R/003" });
+    //     if (inspectionProcess) {
+    //         const inspectionRow = {
+    //             items: [
+    //                 { key: "PART NO", value: items.find(i => i.key === "PART NO")?.value, process: "value" },
+    //                 { key: "PART NAME", value: items.find(i => i.key === "PART NAME")?.value, process: "value" },
+    //                 { key: "ITEM CATEGORY", value: items.find(i => i.key === "ITEM CATEGORY")?.value, process: "value" },
+    //                 { key: "ITEM CODE", value: items.find(i => i.key === "ITEM CODE")?.value, process: "value" },
+    //                 { key: "ITEM NAME", value: items.find(i => i.key === "ITEM NAME")?.value, process: "value" },
+    //                 { key: "GRADE", value: items.find(i => i.key === "GRADE")?.value, process: "value" },
+    //                 { key: "QTY", value: items.find(i => i.key === "QTY")?.value, process: "value" },
+    //                 { key: "UNITS", value: items.find(i => i.key === "UNITS")?.value, process: "value" },
+    //                 { key: "VENDOR NAME", value: items.find(i => i.key === "VENDOR NAME")?.value, process: "value" },
+    //                 { key: 'INVOICE NO', value: '', process: "value" },
+    //                 { key: 'DELIVER DATE', value: '', process: "date" },
+    //                 { key: 'QTY', value: '', process: "value" },
+    //                 { key: 'QUALITY INSPECTION', value: 'QA/R/003A', process: "processId" },
+    //                 { key: 'INSPECTION-STATUS', value: '', process: "select" },
+    //             ],
+    //             rowDataId
+    //         };
 
-            for (let i = 0; i < items.length; i++) {
-                const relatedProcess = await Process.findOne({ processId: items[i].value });
+    //         for (let i = 0; i < items.length; i++) {
+    //             const relatedProcess = await Process.findOne({ processId: items[i].value });
 
-                if (relatedProcess && relatedProcess._id) {
-                    items[i] = {
-                        key: items[i].key,
-                        value: `processId - ${relatedProcess._id}`,
-                        process: ''
-                    };
-                }
-            }
+    //             if (relatedProcess && relatedProcess._id) {
+    //                 items[i] = {
+    //                     key: items[i].key,
+    //                     value: `processId - ${relatedProcess._id}`,
+    //                     process: ''
+    //                 };
+    //             }
+    //         }
 
-            inspectionProcess.data.push(inspectionRow);
-            inspectionProcess.updatedBy = req.user._id;
-            await inspectionProcess.save();
-        }
-    }
+    //         inspectionProcess.data.push(inspectionRow);
+    //         inspectionProcess.updatedBy = req.user._id;
+    //         await inspectionProcess.save();
+    //     }
+    // }
+
+    await handleAddIntersection(process, items, rowDataId, req.user._id);
 
     for (let i = 0; i < items.length; i++) {
         if (ImageUploadArray.includes(items[i].key) && req.files && req.files[items[i].key]) {
@@ -520,4 +523,43 @@ exports.getProcessRowHistory = catchAsyncErrors(async (req, res, next) => {
     success: true,
     data: history
   });
+});
+
+// Search Details
+exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
+    const process = await Process.findOne({ processId: "DD/R/002A" });
+
+    if (!process || !process.data) {
+        return ErrorHandler("Process not found", 404);
+    }
+
+    // Use Sets to remove duplicates
+    const partNo = new Set();
+    const partName = new Set();
+    const type = new Set();
+    const material = new Set();
+
+    process.data.forEach(row => {
+        const pNo = row.items.find(i => i.key === "PART NO")?.value;
+        const pName = row.items.find(i => i.key === "PART NAME")?.value;
+        const pType = row.items.find(i => i.key === "TYPE")?.value;
+        const pMaterial = row.items.find(i => i.key === "MATERIAL")?.value;
+
+        if (pNo) partNo.add(pNo);
+        if (pName) partName.add(pName);
+        if (pType) type.add(pType);
+        if (pMaterial) material.add(pMaterial);
+    });
+
+    const response = [
+        { key: "partNo", value: Array.from(partNo) },
+        { key: "partName", value: Array.from(partName) },
+        { key: "type", value: Array.from(type) },
+        { key: "material", value: Array.from(material) },
+    ];
+
+    res.status(200).json({
+        success: true,
+        data: response
+    });
 });
