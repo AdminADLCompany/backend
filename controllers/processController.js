@@ -552,10 +552,10 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     });
 
     const response = [
-        { key: "partNo", value: Array.from(partNo) },
-        { key: "partName", value: Array.from(partName) },
-        { key: "type", value: Array.from(type) },
-        { key: "material", value: Array.from(material) },
+        { key: "PART NO", value: Array.from(partNo) },
+        { key: "PART NAME", value: Array.from(partName) },
+        { key: "TYPE", value: Array.from(type) },
+        { key: "MATERIAL", value: Array.from(material) },
     ];
 
     res.status(200).json({
