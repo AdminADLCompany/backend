@@ -4,7 +4,7 @@ const History = require('../models/history');
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const cloudinary = require("../config/cloudinary");
-const { handleAddIntersection, handleUpdateIntersection} = require("../utils/intersections");
+const { handleAddIntersection, handleUpdateIntersection, handleDeleteIntersection} = require("../utils/intersections");
 
 const ImageUploadArray = ["UPLOAD", "BEFORE", "AFTER", "CALIBRATION CERTIFICATE NO / DATE", "ACTION REPORT", "NPD FORM", "EVALUATE", "IMAGE"];
 
@@ -461,6 +461,8 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
     if (!process) {
         return next(new ErrorHandler("Process not found", 404));
     }
+
+    await handleDeleteIntersection(process, rowId, req.user._id);
 
     const row = process.data.id(rowId);
     if (!row) {

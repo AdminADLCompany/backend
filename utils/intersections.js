@@ -199,7 +199,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
             procurementRegisterProcess.updatedBy = userId;
             await procurementRegisterProcess.save();
         }
-    }   
+    }
 };
 
 exports.handleUpdateIntersection = async (process, row, items, userId) => {
@@ -276,3 +276,23 @@ exports.handleUpdateIntersection = async (process, row, items, userId) => {
     }
   }
 };
+
+exports.handleDeleteIntersection = async (process, rowId, userId) => {
+  if (process.processId === "DD/R/001") {
+    const bomProcess = await Process.findOne({ processId: "DD/R/002" });
+    const ProductsProcess = await Process.findOne({ processId: "DD/R/002A" });
+    // delete corresponding rows in bomProcess
+    if (ProductsProcess) {
+        const productRowsToDelete = ProductsProcess.data.filter(productRow => { return productRow.rowDataId === rowId; });
+        ProductsProcess.data = ProductsProcess.data.filter(productRow => !productRowsToDelete.includes(productRow));
+        ProductsProcess.updatedBy = userId;
+        await ProductsProcess.save();
+    }
+    if (bomProcess) {
+        const bomRowsToDelete = bomProcess.data.filter(bomRow => { return bomRow.rowDataId === rowId; });
+        bomProcess.data = bomProcess.data.filter(bomRow => !bomRowsToDelete.includes(bomRow));
+        bomProcess.updatedBy = userId;
+        await bomProcess.save();
+    }
+  }
+}
