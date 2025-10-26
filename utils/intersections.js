@@ -5,6 +5,20 @@ const History = require("../models/history");
 /**
  * Handles intersection logic for addData
  */
+// Helper: Link processId values to actual ObjectIds
+const linkProcessIdItems = async (rowItems) => {
+  for (const item of rowItems) {
+    if (item.process === "processId" && item.value) {
+      const relatedProcess = await Process.findOne({ processId: item.value });
+      if (relatedProcess?._id) {
+        item.value = `processId - ${relatedProcess._id}`;
+        item.process = "";
+      }
+    }
+  }
+  return rowItems;
+};
+
 exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
   // ---- MR/R/003B (Action Taken -> Rework) ----
   if (process.processId === "MR/R/003B") {
@@ -29,15 +43,12 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         const rejectQty =
           rejectionRow.items.find((i) => i.key === "REJECT QTY")?.value || 0;
 
-        const actionPlan = items.find(
-          (i) => i.key === "ACTION PLANNING"
-        )?.value;
         const verifiedBy = items.find((i) => i.key === "VERIFIED BY")?.value;
         const status = items.find((i) => i.key === "ACTION PLAN STATUS")?.value;
 
         const reworkProcess = await Process.findOne({ processId: "MR/R/003A" });
         if (reworkProcess) {
-          const reworkRow = {
+          let reworkRow = {
             items: [
               { key: "PART NO", value: partNo, process: "value" },
               { key: "PART NAME", value: partName, process: "value" },
@@ -55,17 +66,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
             rowDataId,
           };
 
-          for (const item of reworkRow.items) {
-            if (item.process === "processId" && item.value) {
-              const relatedProcess = await Process.findOne({
-                processId: item.value,
-              });
-              if (relatedProcess?._id) {
-                item.value = `processId - ${relatedProcess._id}`;
-                item.process = "";
-              }
-            }
-          }
+          reworkRow.items = await linkProcessIdItems(reworkRow.items);
 
           reworkProcess.data.push(reworkRow);
           reworkProcess.updatedBy = userId;
@@ -85,7 +86,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
     }
   }
 
-  // ---- MS/R/005 → MS/R/006 ---- (Quatation List -> Order List)
+  // ---- MS/R/005 → MS/R/006 ---- (Quotation List -> Order List)
   else if (process.processId === "MS/R/005") {
     const moveToItem = items.find((i) => i.key === "QL STATUS");
     if (moveToItem && moveToItem.value === "OPEN") {
@@ -216,17 +217,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         rowDataId,
       };
 
-      for (const item of inspectionRow.items) {
-            if (item.process === "processId" && item.value) {
-              const relatedProcess = await Process.findOne({
-                processId: item.value,
-              });
-              if (relatedProcess?._id) {
-                item.value = `processId - ${relatedProcess._id}`;
-                item.process = "";
-              }
-            }
-          }
+      inspectionRow.items = await linkProcessIdItems(inspectionRow.items);
 
       inspectionProcess.data.push(inspectionRow);
       inspectionProcess.updatedBy = userId;
@@ -241,139 +232,110 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
     });
     const BOM = await Process.findOne({ processId: "DD/R/002" });
     const Products = await Process.findOne({ processId: "DD/R/002A" });
+    if (!procurementRegisterProcess || !BOM || !Products) return;
 
     const MoveItem = items.find((i) => i.key === "RM")?.value;
+    if (MoveItem !== "Blue") return;
 
-    if (MoveItem === "Blue" && procurementRegisterProcess && BOM && Products) {
-      const planNo = items.find((i) => i.key === "PLAN NO")?.value;
-      const date = items.find((i) => i.key === "DATE")?.value;
-      const partNo = items.find((i) => i.key === "PART-NO")?.value;
-      const partName = items.find((i) => i.key === "PART-NAME")?.value;
-      const type = items.find((i) => i.key === "TYPE")?.value;
-      const material = items.find((i) => i.key === "MATERIAL")?.value;
-      const planQty = parseFloat(
-        items.find((i) => i.key === "PLAN QTY")?.value || 0
+    const planNo = items.find((i) => i.key === "PLAN NO")?.value;
+    const date = items.find((i) => i.key === "DATE")?.value;
+    const partNo = items.find((i) => i.key === "PART-NO")?.value;
+    const partName = items.find((i) => i.key === "PART-NAME")?.value;
+    const type = items.find((i) => i.key === "TYPE")?.value;
+    const material = items.find((i) => i.key === "MATERIAL")?.value;
+    const planQty = parseFloat(
+      items.find((i) => i.key === "PLAN QTY")?.value || 0
+    );
+
+    const bomDict = Object.fromEntries(
+      BOM.data.map((b) => [b._id.toString(), b])
+    );
+    const matchingProducts = Products.data.filter((productRow) => {
+      const p = Object.fromEntries(
+        productRow.items.map((i) => [i.key, i.value])
       );
-
-      // Build lookup for BOM
-      const bomDict = Object.fromEntries(
-        BOM.data.map((b) => [b._id.toString(), b])
+      return (
+        p["PART NO"] === partNo &&
+        p["PART NAME"] === partName &&
+        p["TYPE"] === type &&
+        p["MATERIAL"] === material
       );
+    });
 
-      // Find matching products
-      const matchingProducts = Products.data.filter((productRow) => {
-        const p = Object.fromEntries(
-          productRow.items.map((i) => [i.key, i.value])
+    for (const productRow of matchingProducts) {
+      const detailingIds =
+        productRow.items.find((i) => i.key === "DETAILING PRODUCT")?.value ||
+        [];
+      for (const bomId of detailingIds) {
+        const bomRow = bomDict[bomId.toString()];
+        if (!bomRow) continue;
+
+        const b = Object.fromEntries(bomRow.items.map((i) => [i.key, i.value]));
+        const totalQty = parseFloat(b["QTY"] || 0) * planQty;
+
+        let procurementRegisterRow = {
+          items: [
+            { key: "DATE", value: date, process: "date" },
+            { key: "PL NO", value: planNo },
+            { key: "PART NO", value: partNo },
+            { key: "PART NAME", value: partName },
+            { key: "TYPE", value: type },
+            { key: "MATERIAL", value: material },
+            { key: "ITEM CATEGORY", value: "" },
+            { key: "ITEM CODE", value: b["ITEM CODE"] },
+            { key: "ITEM NAME", value: b["ITEM-NAME"] },
+            { key: "GRADE", value: b["GRADE"] },
+            { key: "QTY", value: totalQty.toString() },
+            { key: "UNITS", value: "" },
+            { key: "VENDOR NAME", value: "" },
+            { key: "VALUE", value: "" },
+            { key: "PO NO", value: "" },
+            { key: "LEAD TIME", value: "" },
+            { key: "INWARD", value: "PR/R/003A", process: "processId" },
+            { key: "PR STATUS", value: "" },
+          ],
+          rowDataId,
+        };
+
+        procurementRegisterRow.items = await linkProcessIdItems(
+          procurementRegisterRow.items
         );
-        return (
-          p["PART NO"] === partNo &&
-          p["PART NAME"] === partName &&
-          p["TYPE"] === type &&
-          p["MATERIAL"] === material
-        );
-      });
 
-      for (const productRow of matchingProducts) {
-        const detailingIds =
-          productRow.items.find((i) => i.key === "DETAILING PRODUCT")?.value ||
-          [];
-
-        for (const bomId of detailingIds) {
-          const bomRow = bomDict[bomId.toString()];
-          if (!bomRow) continue;
-
-          const b = Object.fromEntries(
-            bomRow.items.map((i) => [i.key, i.value])
-          );
-          const totalQty = parseFloat(b["QTY"] || 0) * planQty;
-
-          const procurementRegisterRow = {
-            items: [
-              { key: "DATE", value: date, process: "date" },
-              { key: "PL NO", value: planNo, process: "value" },
-              { key: "PART NO", value: partNo, process: "value" },
-              { key: "PART NAME", value: partName, process: "value" },
-              { key: "TYPE", value: type, process: "value" },
-              { key: "MATERIAL", value: material, process: "value" },
-              { key: "ITEM CATEGORY", value: "", process: "value" },
-              { key: "ITEM CODE", value: b["ITEM CODE"], process: "value" },
-              { key: "ITEM NAME", value: b["ITEM-NAME"], process: "value" },
-              { key: "GRADE", value: b["GRADE"], process: "value" },
-              { key: "QTY", value: totalQty.toString(), process: "value" },
-              { key: "UNITS", value: "", process: "value" },
-              { key: "VENDOR NAME", value: "", process: "value" },
-              { key: "VALUE", value: "", process: "value" },
-              { key: "PO NO", value: "", process: "value" },
-              { key: "LEAD TIME", value: "", process: "value" },
-              { key: "INWARD", value: "PR/R/003A", process: "processId" },
-              { key: "PR STATUS", value: "", process: "value" },
-            ],
-            rowDataId,
-          };
-
-          // ✅ Apply processId linking logic properly
-          for (const item of procurementRegisterRow.items) {
-            if (item.process === "processId" && item.value) {
-              const relatedProcess = await Process.findOne({
-                processId: item.value,
-              });
-              if (relatedProcess?._id) {
-                item.value = `processId - ${relatedProcess._id}`;
-                item.process = "";
-              }
-            }
-          }
-
-          procurementRegisterProcess.data.push(procurementRegisterRow);
-        }
+        procurementRegisterProcess.data.push(procurementRegisterRow);
       }
-
-      procurementRegisterProcess.updatedBy = userId;
-      await procurementRegisterProcess.save();
     }
+
+    procurementRegisterProcess.updatedBy = userId;
+    await procurementRegisterProcess.save();
   }
 
   // ---- DD/R/002 ---- Product Code Generation ----
   if (process.processId === "DD/R/002") {
     const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
+    if (!itemListProcess) return null;
 
-    if (itemListProcess) {
-      // Extract item name and grade from incoming 'items'
-      const inputItemName = items
+    const inputItemName = items
+      .find((i) => i.key === "ITEM NAME")
+      ?.value?.trim();
+    const inputItemGrade = items
+      .find((i) => i.key === "ITEM GRADE")
+      ?.value?.trim();
+    if (!inputItemName || !inputItemGrade) return null;
+
+    const matchedRow = itemListProcess.data.find((itemRow) => {
+      const rowItemName = itemRow.items
         .find((i) => i.key === "ITEM NAME")
         ?.value?.trim();
-      const inputItemGrade = items
+      const rowItemGrade = itemRow.items
         .find((i) => i.key === "ITEM GRADE")
         ?.value?.trim();
+      return (
+        rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
+        rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
+      );
+    });
 
-      if (!inputItemName || !inputItemGrade) return null;
-
-      // Find matching row inside itemListProcess.data
-      const matchedRow = itemListProcess.data.find((itemRow) => {
-        const rowItemName = itemRow.items
-          .find((i) => i.key === "ITEM NAME")
-          ?.value?.trim();
-        const rowItemGrade = itemRow.items
-          .find((i) => i.key === "ITEM GRADE")
-          ?.value?.trim();
-        return (
-          rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
-          rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
-        );
-      });
-
-      // If matched, extract and return ITEM CODE
-      if (matchedRow) {
-        const itemCode = matchedRow.items.find(
-          (i) => i.key === "ITEM CODE"
-        )?.value;
-        return itemCode || null;
-      } else {
-        return null; // no match found
-      }
-    }
-
-    return null; // no PR/R/002 process found
+    return matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? null;
   }
 };
 
