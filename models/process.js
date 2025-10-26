@@ -3,7 +3,7 @@ const historyPlugin = require('../middleware/historyPlugin');
 
 const keyValueSchema = new mongoose.Schema({
     key: { type: String, required: true },
-    value: { type:  mongoose.Schema.Types.Mixed, required: true },
+    value: { type: mongoose.Schema.Types.Mixed, default: "" },
     process: { type: String, default: "" } // optional reference to another processId
 }, { _id: false });
 

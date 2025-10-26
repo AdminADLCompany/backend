@@ -48,12 +48,25 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               },
               { key: "REWORK QTY", value: rejectQty, process: "value" },
               { key: "REJECT STAGE", value: rejectStage, process: "value" },
-              { key: "ACTION PLAN", value: actionPlan, process: "value" },
+              { key: "ACTION PLAN", value: "QA/R/007A", process: "processId" },
               { key: "VERIFIED BY", value: verifiedBy, process: "value" },
               { key: "STATUS", value: status, process: "value" },
             ],
             rowDataId,
           };
+
+          for (const item of reworkRow.items) {
+            if (item.process === "processId" && item.value) {
+              const relatedProcess = await Process.findOne({
+                processId: item.value,
+              });
+              if (relatedProcess?._id) {
+                item.value = `processId - ${relatedProcess._id}`;
+                item.process = "";
+              }
+            }
+          }
+
           reworkProcess.data.push(reworkRow);
           reworkProcess.updatedBy = userId;
           await reworkProcess.save();
@@ -203,6 +216,18 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         rowDataId,
       };
 
+      for (const item of inspectionRow.items) {
+            if (item.process === "processId" && item.value) {
+              const relatedProcess = await Process.findOne({
+                processId: item.value,
+              });
+              if (relatedProcess?._id) {
+                item.value = `processId - ${relatedProcess._id}`;
+                item.process = "";
+              }
+            }
+          }
+
       inspectionProcess.data.push(inspectionRow);
       inspectionProcess.updatedBy = userId;
       await inspectionProcess.save();
@@ -219,67 +244,48 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
     const MoveItem = items.find((i) => i.key === "RM")?.value;
 
-    if (
-      MoveItem === "Orange" &&
-      procurementRegisterProcess &&
-      BOM &&
-      Products
-    ) {
+    if (MoveItem === "Blue" && procurementRegisterProcess && BOM && Products) {
       const planNo = items.find((i) => i.key === "PLAN NO")?.value;
       const date = items.find((i) => i.key === "DATE")?.value;
-      const partNo = items.find((i) => i.key === "PART NO")?.value;
-      const partName = items.find((i) => i.key === "PART NAME")?.value;
+      const partNo = items.find((i) => i.key === "PART-NO")?.value;
+      const partName = items.find((i) => i.key === "PART-NAME")?.value;
       const type = items.find((i) => i.key === "TYPE")?.value;
       const material = items.find((i) => i.key === "MATERIAL")?.value;
       const planQty = parseFloat(
         items.find((i) => i.key === "PLAN QTY")?.value || 0
       );
 
-      // Pre-build a lookup dictionary for BOM rows
-      const bomDict = {};
-      BOM.data.forEach((bomRow) => {
-        bomDict[bomRow._id.toString()] = bomRow;
-      });
+      // Build lookup for BOM
+      const bomDict = Object.fromEntries(
+        BOM.data.map((b) => [b._id.toString(), b])
+      );
 
-      // Filter Products that match partNo, partName, type, material
+      // Find matching products
       const matchingProducts = Products.data.filter((productRow) => {
-        const pPartNo = productRow.items.find(
-          (i) => i.key === "PART NO"
-        )?.value;
-        const pPartName = productRow.items.find(
-          (i) => i.key === "PART NAME"
-        )?.value;
-        const pType = productRow.items.find((i) => i.key === "TYPE")?.value;
-        const pMaterial = productRow.items.find(
-          (i) => i.key === "MATERIAL"
-        )?.value;
-
+        const p = Object.fromEntries(
+          productRow.items.map((i) => [i.key, i.value])
+        );
         return (
-          pPartNo === partNo &&
-          pPartName === partName &&
-          pType === type &&
-          pMaterial === material
+          p["PART NO"] === partNo &&
+          p["PART NAME"] === partName &&
+          p["TYPE"] === type &&
+          p["MATERIAL"] === material
         );
       });
 
-      matchingProducts.forEach((productRow) => {
+      for (const productRow of matchingProducts) {
         const detailingIds =
           productRow.items.find((i) => i.key === "DETAILING PRODUCT")?.value ||
           [];
-        detailingIds.forEach((bomId) => {
-          const bomRow = bomDict[bomId.toString()];
-          if (!bomRow) return console.log("BOM row not found for id", bomId);
 
-          const itemCode =
-            bomRow.items.find((i) => i.key === "ITEM CODE")?.value || "";
-          const itemName =
-            bomRow.items.find((i) => i.key === "ITEM NAME")?.value || "";
-          const grade =
-            bomRow.items.find((i) => i.key === "GRADE")?.value || "";
-          const bomQty = parseFloat(
-            bomRow.items.find((i) => i.key === "QTY")?.value || 0
+        for (const bomId of detailingIds) {
+          const bomRow = bomDict[bomId.toString()];
+          if (!bomRow) continue;
+
+          const b = Object.fromEntries(
+            bomRow.items.map((i) => [i.key, i.value])
           );
-          const totalQty = bomQty * planQty;
+          const totalQty = parseFloat(b["QTY"] || 0) * planQty;
 
           const procurementRegisterRow = {
             items: [
@@ -290,33 +296,95 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               { key: "TYPE", value: type, process: "value" },
               { key: "MATERIAL", value: material, process: "value" },
               { key: "ITEM CATEGORY", value: "", process: "value" },
-              { key: "ITEM CODE", value: itemCode, process: "value" },
-              { key: "ITEM NAME", value: itemName, process: "value" },
-              { key: "GRADE", value: grade, process: "value" },
+              { key: "ITEM CODE", value: b["ITEM CODE"], process: "value" },
+              { key: "ITEM NAME", value: b["ITEM-NAME"], process: "value" },
+              { key: "GRADE", value: b["GRADE"], process: "value" },
               { key: "QTY", value: totalQty.toString(), process: "value" },
               { key: "UNITS", value: "", process: "value" },
               { key: "VENDOR NAME", value: "", process: "value" },
               { key: "VALUE", value: "", process: "value" },
               { key: "PO NO", value: "", process: "value" },
               { key: "LEAD TIME", value: "", process: "value" },
-              { key: "INWARD", value: "", process: "value" },
+              { key: "INWARD", value: "PR/R/003A", process: "processId" },
               { key: "PR STATUS", value: "", process: "value" },
             ],
-            rowDataId: rowDataId,
+            rowDataId,
           };
 
-          procurementRegisterProcess.data.push(procurementRegisterRow);
-        });
-      });
+          // ✅ Apply processId linking logic properly
+          for (const item of procurementRegisterRow.items) {
+            if (item.process === "processId" && item.value) {
+              const relatedProcess = await Process.findOne({
+                processId: item.value,
+              });
+              if (relatedProcess?._id) {
+                item.value = `processId - ${relatedProcess._id}`;
+                item.process = "";
+              }
+            }
+          }
 
-      // Save the updated procurement register
+          procurementRegisterProcess.data.push(procurementRegisterRow);
+        }
+      }
+
       procurementRegisterProcess.updatedBy = userId;
       await procurementRegisterProcess.save();
     }
   }
+
+  // ---- DD/R/002 ---- Product Code Generation ----
+  if (process.processId === "DD/R/002") {
+    const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
+
+    if (itemListProcess) {
+      // Extract item name and grade from incoming 'items'
+      const inputItemName = items
+        .find((i) => i.key === "ITEM NAME")
+        ?.value?.trim();
+      const inputItemGrade = items
+        .find((i) => i.key === "ITEM GRADE")
+        ?.value?.trim();
+
+      if (!inputItemName || !inputItemGrade) return null;
+
+      // Find matching row inside itemListProcess.data
+      const matchedRow = itemListProcess.data.find((itemRow) => {
+        const rowItemName = itemRow.items
+          .find((i) => i.key === "ITEM NAME")
+          ?.value?.trim();
+        const rowItemGrade = itemRow.items
+          .find((i) => i.key === "ITEM GRADE")
+          ?.value?.trim();
+        return (
+          rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
+          rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
+        );
+      });
+
+      // If matched, extract and return ITEM CODE
+      if (matchedRow) {
+        const itemCode = matchedRow.items.find(
+          (i) => i.key === "ITEM CODE"
+        )?.value;
+        return itemCode || null;
+      } else {
+        return null; // no match found
+      }
+    }
+
+    return null; // no PR/R/002 process found
+  }
 };
 
-exports.handleUpdateIntersection = async (process, row, items, userId) => {
+exports.handleUpdateIntersection = async (
+  process,
+  items,
+  row,
+  userId,
+  rowId,
+  previousItems
+) => {
   // ---- MR/R/003B (Rework) ----
   if (process.processId === "MR/R/003B") {
     const moveToItem = items.find((i) => i.key === "MOVE TO");
@@ -451,44 +519,151 @@ exports.handleUpdateIntersection = async (process, row, items, userId) => {
       }
     }
   }
+
+  // ---- MR/R/001 ----
+  else if (process.processId === "MR/R/001") {
+    const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+    const planNumber = items.find((i) => i.key === "PLAN NO")?.value;
+    const date = items.find((i) => i.key === "DATE")?.value;
+    const partNo = items.find((i) => i.key === "PART NO")?.value;
+    const partName = items.find((i) => i.key === "PART NAME")?.value;
+    const type = items.find((i) => i.key === "TYPE")?.value;
+    const material = items.find((i) => i.key === "MATERIAL")?.value;
+    const planQty = Number(items.find((i) => i.key === "PLAN QTY")?.value);
+    const previousPlanQty = Number(
+      previousItems.find((i) => i.key === "PLAN QTY")?.value
+    );
+
+    if (procurementProcess && planNumber) {
+      for (const prRow of procurementProcess.data) {
+        const plNo = prRow.items.find((i) => i.key === "PL NO")?.value;
+        if (plNo !== planNumber) continue;
+
+        const prQuantity = Number(
+          prRow.items.find((i) => i.key === "QTY")?.value || 0
+        );
+        const bomQuantity = previousPlanQty
+          ? Number(prQuantity / previousPlanQty)
+          : 0;
+        const newQuantity = Number(planQty * bomQuantity) || 0;
+
+        const updateValue = (key, val) => {
+          const item = prRow.items.find((i) => i.key === key);
+          if (item) item.value = val;
+        };
+
+        updateValue("QTY", newQuantity.toString());
+        updateValue("DATE", date);
+        updateValue("PART NO", partNo);
+        updateValue("PART NAME", partName);
+        updateValue("TYPE", type);
+        updateValue("MATERIAL", material);
+
+        prRow.updatedAt = new Date();
+        prRow.updatedBy = userId;
+      }
+
+      await procurementProcess.save();
+      console.log("✅ Procurement data updated & saved successfully.");
+    }
+  }
 };
 
 exports.handleDeleteIntersection = async (process, rowId, userId) => {
-  const deleteRows = async (processId) => {
-    const targetProcess = await Process.findOne({ processId });
-    if (!targetProcess) return;
-    targetProcess.data = targetProcess.data.filter(
-      (row) => row.rowDataId !== rowId
-    );
-    targetProcess.updatedBy = userId;
-    await targetProcess.save();
+  // Utility function to delete linked rows safely
+  const deleteLinkedRows = async (targetProcessId, filterFn) => {
+    const target = await Process.findOne({ processId: targetProcessId });
+    if (!target) return;
+
+    const rowsToDelete = target.data.filter(filterFn);
+    target.data = target.data.filter((r) => !rowsToDelete.includes(r));
+    target.updatedBy = userId;
+    await target.save();
   };
 
-  // Define relationships (base process → related processes)
-  const relationships = {
-    "DD/R/001": [
+  // ---- DD/R/001 → DD/R/002, DD/R/002A, DD/R/003, DD/R/004, DD/R/005, QA/R/009 ---- Product List.
+  if (process.processId === "DD/R/001") {
+    const targets = [
       "DD/R/002",
       "DD/R/002A",
       "DD/R/003",
       "DD/R/004",
       "DD/R/005",
       "QA/R/009",
-    ],
-    "DD/R/002": ["DD/R/012", "DD/R/014", "DD/R/008"],
-    "MR/R/002": ["MR/R/002A", "MR/R/002B"],
-    "MR/R/003": ["MR/R/003B"],
-    "MR/R/003A": ["QA/R/007A"],
-    "QA/R/003": ["QA/R/003A"],
-    "QA/R/007": ["QA/R/007A"],
-    "QA/F/005": ["QA/F/005A"],
-    "MR/R/005": ["MR/R/005A"],
-    "MN/R/003": ["QA/F/005A"],
-    "PR/R/003": ["PR/R/003A"]
-  };
+    ];
+    for (const id of targets)
+      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+  }
 
-  // If this processId has any dependent ones, delete them
-  const dependentProcesses = relationships[process.processId];
-  if (dependentProcesses) {
-    await Promise.all(dependentProcesses.map((id) => deleteRows(id)));
+  // ---- DD/R/002 → DD/R/012, DD/R/014, DD/R/008 ---- NPD Register
+  else if (process.processId === "DD/R/010") {
+    const targets = ["DD/R/012", "DD/R/014", "DD/R/008"];
+    for (const id of targets)
+      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MR/R/002 → MR/R/002A, MR/R/002B ---- Production Report
+  else if (process.processId === "MR/R/002") {
+    const targets = ["MR/R/002A", "MR/R/002B"];
+    for (const id of targets)
+      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MR/R/003B → MR/R/003 ---- Rejection Report
+  else if (process.processId === "MR/R/003") {
+    await deleteLinkedRows("MR/R/003B", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MR/R/003A → QA/R/007A ---- Rework Report
+  else if (process.processId === "MR/R/003A") {
+    await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- QA/R/003 → QA/R/003A ---- Incoming Inspection
+  else if (process.processId === "QA/R/003") {
+    await deleteLinkedRows("QA/R/003A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- QA/R/007 → QA/R/007A ---- Customer Complaint Register
+  else if (process.processId === "QA/R/007") {
+    await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- QA/F/005 → QA/F/005A ---- Calibration Register
+  else if (process.processId === "QA/F/005") {
+    await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MR/R/005 → MR/R/005A ---- Improvement Status
+  else if (process.processId === "MR/R/005") {
+    await deleteLinkedRows("MR/R/005A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MN/R/003 → QA/F/005A ---- Maintenance Report
+  else if (process.processId === "MN/R/003") {
+    await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
+  }
+
+  // ---- MR/R/001 → PR/R/003 ---- Production Plan
+  else if (process.processId === "MR/R/001") {
+    const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+    const row = process.data.id(rowId);
+    const planNumber = row.items.find((i) => i.key === "PLAN NO")?.value;
+
+    if (procurementProcess) {
+      const rowsToDelete = procurementProcess.data.filter(
+        (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
+      );
+      procurementProcess.data = procurementProcess.data.filter(
+        (r) => !rowsToDelete.includes(r)
+      );
+      procurementProcess.updatedBy = userId;
+      await procurementProcess.save();
+    }
+  }
+
+  // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
+  else if (process.processId === "PR/R/003") {
+    await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
   }
 };
