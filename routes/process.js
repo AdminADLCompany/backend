@@ -18,9 +18,11 @@ const {
     deleteData,
     getaProcessHistory,
     getProcessRowHistory,
-    getProductDetails
+    getProductDetails,
+    deleteAllProcessData
 } = require("../controllers/processController");
 
+router.route("/deleteAllData").delete(deleteAllProcessData);
 router.route("/all").get(isAuthenticatedUser, getAllProcesses)
 router.route("/search").get(isAuthenticatedUser, getProductDetails);
 
@@ -59,5 +61,6 @@ router.route("/data/:id").post(
     
 router.route("/history/:id").get(isAuthenticatedUser, getaProcessHistory);
 router.route("/history/:id/:rowId").get(isAuthenticatedUser, getProcessRowHistory);
+
 
 module.exports = router;
