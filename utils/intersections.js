@@ -43,10 +43,6 @@ const sceduledLoss = [
   },
 ];
 
-/**
- * Handles intersection logic for addData
- */
-// Helper: Link processId values to actual ObjectIds
 const linkProcessIdItems = async (rowItems) => {
   for (const item of rowItems) {
     if (item.process === "processId" && item.value) {
@@ -150,85 +146,6 @@ exports.handleAddIntersection = catchAsyncErrors(
           newData: reworkRow,
           changedBy: userId,
         });
-      }
-    }
-
-    // ---- MS/R/005 → MS/R/006 ---- (Quotation List -> Order List)
-    else if (process.processId === "MS/R/005") {
-      const moveToItem = items.find((i) => i.key === "QL STATUS");
-
-      if (moveToItem && moveToItem.value === "OPEN") {
-        const orderListProcess = await Process.findOne({
-          processId: "MS/R/006",
-        });
-
-        if (!orderListProcess) {
-          throw new ErrorHandler(
-            "Order List Process (MS/R/006) not found",
-            404
-          );
-        }
-
-        const orderListRow = {
-          items: [
-            {
-              key: "DATE",
-              value: items.find((i) => i.key === "DATE")?.value,
-              process: "value",
-            },
-            {
-              key: "QUOTE NO",
-              value: items.find((i) => i.key === "QUOTATION NO")?.value,
-              process: "value",
-            },
-            {
-              key: "ENQ BY",
-              value: items.find((i) => i.key === "ENQ BY")?.value,
-              process: "value",
-            },
-            {
-              key: "CUSTOMER NAME",
-              value: items.find((i) => i.key === "CUSTOMER NAME")?.value,
-              process: "value",
-            },
-            {
-              key: "LOCATION",
-              value: items.find((i) => i.key === "LOCATION")?.value,
-              process: "value",
-            },
-            {
-              key: "DESCRIPTION",
-              value: items.find((i) => i.key === "DESCRIPTION")?.value,
-              process: "value",
-            },
-            {
-              key: "QTY",
-              value: items.find((i) => i.key === "QTY")?.value,
-              process: "value",
-            },
-            {
-              key: "UNITS",
-              value: items.find((i) => i.key === "UNITS")?.value,
-              process: "value",
-            },
-            { key: "VALUE", value: "", process: "value" },
-            { key: "ORDER DATE", value: "", process: "value" },
-            { key: "PO NO", value: "", process: "value" },
-            { key: "LEAD TIME", value: "", process: "value" },
-            { key: "INVOICE NO", value: "", process: "value" },
-            { key: "DELIVERY QTY", value: "", process: "value" },
-            { key: "PENDING QTY", value: "", process: "value" },
-            { key: "DELIVERY DATE", value: "", process: "value" },
-            { key: "GRN", value: "", process: "value" },
-            { key: "PAYMENT", value: "", process: "value" },
-          ],
-          rowDataId,
-        };
-
-        orderListProcess.data.push(orderListRow);
-        orderListProcess.updatedBy = userId;
-
-        await orderListProcess.save();
       }
     }
 
@@ -357,7 +274,7 @@ exports.handleAddIntersection = catchAsyncErrors(
         throw new ErrorHandler("Products (DD/R/002A) not found", 404);
 
       const MoveItem = items.find((i) => i.key === "RM")?.value;
-      if (MoveItem !== "Blue") return;
+      if (MoveItem !== "Planning") return;
 
       const planNo = items.find((i) => i.key === "PLAN NO")?.value;
       const date = items.find((i) => i.key === "DATE")?.value;
@@ -512,10 +429,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
       const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
 
-      if (!storeRegisterProcess || !itemListProcess) throw new ErrorHandler(
-        "Store Register Process (ST/R/005) or Item List Process (PR/R/002) not found",
-        404
-      );
+      if (!storeRegisterProcess || !itemListProcess)
+        throw new ErrorHandler(
+          "Store Register Process (ST/R/005) or Item List Process (PR/R/002) not found",
+          404
+        );
 
       const inputCode = items.find((i) => i.key === "ITEM CODE")?.value;
 
@@ -526,10 +444,11 @@ exports.handleAddIntersection = catchAsyncErrors(
         return rowItemCode === inputCode;
       });
 
-      if (!matchedRow) throw new ErrorHandler(
-        "Item not found in Item List Process (PR/R/002)",
-        404
-      );
+      if (!matchedRow)
+        throw new ErrorHandler(
+          "Item not found in Item List Process (PR/R/002)",
+          404
+        );
 
       const itemName = matchedRow.items.find(
         (i) => i.key === "ITEM NAME"
@@ -578,10 +497,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       if (stockDataProcess) {
         const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-        if (!itemCode) throw new ErrorHandler(
-          "Item Code not found in Item List Process (PR/R/002)",
-          404
-        );
+        if (!itemCode)
+          throw new ErrorHandler(
+            "Item Code not found in Item List Process (PR/R/002)",
+            404
+          );
 
         // Find if stock entry for this item already exists
         const existingStockRow = stockDataProcess.data.find(
@@ -643,10 +563,11 @@ exports.handleAddIntersection = catchAsyncErrors(
         return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
       });
 
-      if (!matchedRow || !storeRegisterProcess) throw new ErrorHandler(
-        "Item not found in Store Register Process (ST/R/005)",
-        404
-      );
+      if (!matchedRow || !storeRegisterProcess)
+        throw new ErrorHandler(
+          "Item not found in Store Register Process (ST/R/005)",
+          404
+        );
 
       const storeRegisterRow = {
         items: [
@@ -769,7 +690,10 @@ exports.handleAddIntersection = catchAsyncErrors(
         processId: "MR/R/002",
       });
       if (!breakHourProcess || !productionReportProcess)
-        throw new ErrorHandler("No production report or Break Process Found", 404);
+        throw new ErrorHandler(
+          "No production report or Break Process Found",
+          404
+        );
 
       // find the matchrow of the production report by _id of the each data row with rowDataId we have now 69197d26a7e0a3fff476f0b2
       const productionReportRow = productionReportProcess.data.find(
@@ -777,7 +701,8 @@ exports.handleAddIntersection = catchAsyncErrors(
       );
 
       // if (!productionReportRow) throw new Error("No production report row found");
-      if (!productionReportRow) throw new ErrorHandler("No production report row found", 404);
+      if (!productionReportRow)
+        throw new ErrorHandler("No production report row found", 404);
 
       const start = toMinutes(
         productionReportRow.items.find((i) => i.key === "START TIME")?.value
@@ -863,6 +788,130 @@ exports.handleAddIntersection = catchAsyncErrors(
       breakHourProcess.data.push(breakHourRow);
       breakHourProcess.updatedBy = userId;
       await breakHourProcess.save();
+    }
+
+    // ---- MS/R/005 -> MS/R/006 ---- Order List -> Quotation list
+    else if (process.processId === "MS/R/005") {
+      const orderListProcess = await Process.findOne({
+        processId: "MS/R/006",
+      });
+
+      const isMoving = items.find((i) => i.key === "QL STATUS")?.value;
+
+      if (!orderListProcess)
+        throw new ErrorHandler("No order list process found", 404);
+
+      if (isMoving === "ORDER") {
+        const orderListRow = {
+          items: [
+            {
+              key: "DATE",
+              value: items.find((i) => i.key === "DATE")?.value,
+              process: "value",
+            },
+            {
+              key: "QUOTE NO",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "PART NO",
+              value: items.find((i) => i.key === "PART NO")?.value,
+              process: "value",
+            },
+            {
+              key: "PART NAME",
+              value: items.find((i) => i.key === "PART NAME")?.value,
+              process: "value",
+            },
+            {
+              key: "ENQ BY",
+              value: items.find((i) => i.key === "ENQ BY")?.value,
+              process: "value",
+            },
+            {
+              key: "CUSTOMER NAME",
+              value: items.find((i) => i.key === "CUSTOMER-NAME")?.value,
+              process: "value",
+            },
+            {
+              key: "LOCATION",
+              value: items.find((i) => i.key === "LOCATION")?.value,
+              process: "value",
+            },
+            {
+              key: "DESCRIPTION",
+              value: items.find((i) => i.key === "DESCRIPTION")?.value,
+              process: "value",
+            },
+            {
+              key: "QTY",
+              value: items.find((i) => i.key === "QTY")?.value,
+              process: "value",
+            },
+            {
+              key: "UNITS",
+              value: items.find((i) => i.key === "UNITS")?.value,
+              process: "value",
+            },
+            {
+              key: "VALUE",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "ORDER DATE",
+              value: items.find((i) => i.key === "ORDER DATE")?.value,
+              process: "value",
+            },
+            {
+              key: "PO NO",
+              value: items.find((i) => i.key === "PO NO")?.value,
+              process: "value",
+            },
+            {
+              key: "LEAD TIME",
+              value: items.find((i) => i.key === "LEAD TIME")?.value,
+              process: "value",
+            },
+            {
+              key: "INVOICE NO",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "DELIVERY QTY",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "PENDING QTY",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "DELIVERY DATE",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "GRN",
+              value: "",
+              process: "value",
+            },
+            {
+              key: "PAYMENT",
+              value: "",
+              process: "select",
+            },
+          ],
+          rowDataId: row.rowDataId,
+        };
+
+        orderListProcess.data.push(orderListRow);
+        orderListProcess.updatedBy = userId;
+        await orderListProcess.save();
+      }
     }
   }
 );
@@ -953,9 +1002,15 @@ exports.handleUpdateIntersection = catchAsyncErrors(
     // ---- MS/R/005 → MS/R/006 ----
     else if (process.processId === "MS/R/005") {
       const moveToItem = items.find((i) => i.key === "QL STATUS");
-      if (moveToItem && moveToItem.value === "OPEN") {
+      if (moveToItem && moveToItem.value === "ORDER") {
         const orderListProcess = await Process.findOne({
           processId: "MS/R/006",
+        });
+        const storeRegisterProcess = await Process.findOne({
+          processId: "ST/R/005",
+        });
+        const stockDataProcess = await Process.findOne({
+          processId: "ST/R/006",
         });
         if (orderListProcess) {
           const orderListRow = {
@@ -967,7 +1022,17 @@ exports.handleUpdateIntersection = catchAsyncErrors(
               },
               {
                 key: "QUOTE NO",
-                value: items.find((i) => i.key === "QUOTATION NO")?.value,
+                value: "",
+                process: "value",
+              },
+              {
+                key: "PART NO",
+                value: items.find((i) => i.key === "PART NO")?.value,
+                process: "value",
+              },
+              {
+                key: "PART NAME",
+                value: items.find((i) => i.key === "PART NAME")?.value,
                 process: "value",
               },
               {
@@ -977,7 +1042,7 @@ exports.handleUpdateIntersection = catchAsyncErrors(
               },
               {
                 key: "CUSTOMER NAME",
-                value: items.find((i) => i.key === "CUSTOMER NAME")?.value,
+                value: items.find((i) => i.key === "CUSTOMER-NAME")?.value,
                 process: "value",
               },
               {
@@ -1000,12 +1065,188 @@ exports.handleUpdateIntersection = catchAsyncErrors(
                 value: items.find((i) => i.key === "UNITS")?.value,
                 process: "value",
               },
-              { key: "VALUE", value: "", process: "value" },
+              {
+                key: "VALUE",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "ORDER DATE",
+                value: items.find((i) => i.key === "ORDER DATE")?.value,
+                process: "value",
+              },
+              {
+                key: "PO NO",
+                value: items.find((i) => i.key === "PO NO")?.value,
+                process: "value",
+              },
+              {
+                key: "LEAD TIME",
+                value: items.find((i) => i.key === "LEAD TIME")?.value,
+                process: "value",
+              },
+              {
+                key: "INVOICE NO",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "DELIVERY QTY",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "PENDING QTY",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "DELIVERY DATE",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "GRN",
+                value: "",
+                process: "value",
+              },
+              {
+                key: "PAYMENT",
+                value: "",
+                process: "select",
+              },
             ],
+            rowDataId: rowId,
           };
+
           orderListProcess.data.push(orderListRow);
           orderListProcess.updatedBy = userId;
           await orderListProcess.save();
+        }
+
+        const matchedRow = storeRegisterProcess.data.find((itemRow) => {
+          const rowItemCode = itemRow.items.find(
+            (i) => i.key === "ITEM CODE"
+          )?.value;
+          return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
+        });
+
+        if (!matchedRow || !storeRegisterProcess)
+          throw new ErrorHandler(
+            "Item not found in Store Register Process (ST/R/005)",
+            404
+          );
+
+        const storeRegisterRow = {
+          items: [
+            {
+              key: "DATE",
+              value: items.find((i) => i.key === "DATE")?.value,
+              process: "value",
+            },
+            {
+              key: "IN / OUT",
+              value: "OUT",
+              process: "value",
+            },
+            {
+              key: "ITEM CATEGORY",
+              value: matchedRow.items.find((i) => i.key === "ITEM CATEGORY")
+                ?.value,
+              process: "value",
+            },
+            {
+              key: "ITEM CODE",
+              value: matchedRow.items.find((i) => i.key === "ITEM CODE")?.value,
+              process: "value",
+            },
+            {
+              key: "ITEM NAME",
+              value: matchedRow.items.find((i) => i.key === "ITEM NAME")?.value,
+              process: "value",
+            },
+            {
+              key: "VENDOR / CUSTOMER",
+              value: matchedRow.items.find((i) => i.key === "VENDOR / CUSTOMER")
+                ?.value,
+              process: "value",
+            },
+            {
+              key: "QTY",
+              value: items.find((i) => i.key === "QTY")?.value,
+              process: "value",
+            },
+            {
+              key: "DOC &REPORT NO",
+              value: items.find((i) => i.key === "DC NO")?.value,
+              process: "value",
+            },
+          ],
+          rowDataId: rowId,
+        };
+
+        storeRegisterProcess.data.push(storeRegisterRow);
+        storeRegisterProcess.updatedBy = userId;
+        await storeRegisterProcess.save();
+
+        if (stockDataProcess) {
+          // 🧩 Use PART NO as the item code reference
+          const itemCode = items.find((i) => i.key === "PART NO")?.value;
+          const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
+
+          if (!itemCode) throw new ErrorHandler("Item code not found", 404);
+
+          // 🔍 Find existing stock entry for this item
+          const existingStockRow = stockDataProcess.data.find(
+            (r) =>
+              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
+          );
+
+          if (existingStockRow) {
+            // 🟠 Update existing stock entry (OUT operation)
+            const inItem = existingStockRow.items.find((i) => i.key === "IN");
+            const outItem = existingStockRow.items.find((i) => i.key === "OUT");
+            const stockItem = existingStockRow.items.find(
+              (i) => i.key === "STOCK"
+            );
+
+            const currentIn = Number(inItem?.value || 0);
+            const currentOut = Number(outItem?.value || 0);
+
+            const newOut = currentOut + qty;
+            const newStock = currentIn - newOut; // stock decreases when OUT happens
+
+            // Update values safely
+            if (outItem) outItem.value = newOut.toString();
+            if (stockItem) stockItem.value = newStock.toString();
+
+            stockDataProcess.updatedBy = userId;
+            await stockDataProcess.save();
+          } else {
+            // 🆕 Create new stock entry (first-time OUT)
+            const itemCategory =
+              items.find((i) => i.key === "ITEM CATEGORY")?.value || "";
+            const itemName =
+              items.find((i) => i.key === "ITEM NAME")?.value || "";
+
+            const newStock = 0 - qty; // negative or zero stock indicates outgoing only
+
+            const newStockRow = {
+              items: [
+                { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
+                { key: "ITEM CODE", value: itemCode, process: "value" },
+                { key: "ITEM NAME", value: itemName, process: "value" },
+                { key: "IN", value: "0", process: "value" },
+                { key: "OUT", value: qty.toString(), process: "value" },
+                { key: "STOCK", value: newStock.toString(), process: "value" },
+              ],
+              rowDataId: row.rowDataId,
+            };
+
+            stockDataProcess.data.push(newStockRow);
+            stockDataProcess.updatedBy = userId;
+            await stockDataProcess.save();
+          }
         }
       }
     }
@@ -1056,7 +1297,6 @@ exports.handleUpdateIntersection = catchAsyncErrors(
         }
 
         await procurementProcess.save();
-        console.log("✅ Procurement data updated & saved successfully.");
       }
     }
 
@@ -1307,7 +1547,7 @@ exports.handleUpdateIntersection = catchAsyncErrors(
   }
 );
 
-exports.handleDeleteIntersection = async (process, rowId, userId) => {
+exports.handleDeleteIntersection = catchAsyncErrors(async (process, rowId, userId) => {
   // Utility function to delete linked rows safely
   const deleteLinkedRows = async (targetProcessId, filterFn) => {
     const target = await Process.findOne({ processId: targetProcessId });
@@ -1404,4 +1644,4 @@ exports.handleDeleteIntersection = async (process, rowId, userId) => {
   else if (process.processId === "PR/R/003") {
     await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
   }
-};
+});

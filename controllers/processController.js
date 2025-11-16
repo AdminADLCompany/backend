@@ -204,6 +204,26 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
 
   await handleAddIntersection(process, items, rowDataId, req.user._id);
 
+  // ---------------- Image Upload ----------------
+  for (const item of items) {
+    if (ImageUploadArray.includes(item.key) && req.files?.[item.key]) {
+      const file = req.files[item.key][0];
+      const upload = await cloudinary.uploader.upload(file.path, {
+        folder: "process_images",
+      });
+      item.value = upload.secure_url;
+    }
+  }
+
+  // --------------- Replace processId refs ---------------
+  for (const item of items) {
+    if (item.process === "processId" && item.value) {
+      const p = await Process.findOne({ processId: item.value });
+      if (p?._id) item.value = `processId - ${p._id}`;
+      item.process = "";
+    }
+  }
+
   // ---------------- MR/R/002 (OEE Calculation) ----------------
   if (process.processId === "MR/R/002") {
     const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
@@ -236,23 +256,15 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     if (planItem) planItem.value = String(plan);
   }
 
-  // ---------------- Image Upload ----------------
-  for (const item of items) {
-    if (ImageUploadArray.includes(item.key) && req.files?.[item.key]) {
-      const file = req.files[item.key][0];
-      const upload = await cloudinary.uploader.upload(file.path, {
-        folder: "process_images",
-      });
-      item.value = upload.secure_url;
-    }
-  }
+  // ---------------- MS/R/005 (Quotation) ----------------
+  else if (process.processId === "MS/R/005") {
+    const quotationItem = items.find((i) => i.key === "QUOTATION NO");
+    const qlStatusItem = items.find((i) => i.key === "QL STATUS");
 
-  // --------------- Replace processId refs ---------------
-  for (const item of items) {
-    if (item.process === "processId" && item.value) {
-      const p = await Process.findOne({ processId: item.value });
-      if (p?._id) item.value = `processId - ${p._id}`;
-      item.process = "";
+    if (qlStatusItem && quotationItem !== "ORDER") {
+      const quotationNo = quotationItem?.value?.trim() || "";
+      qlStatusItem.value =
+        quotationNo === "" ? "WAITING FOR CODE" : "WAITING FOR ORDER";
     }
   }
 
@@ -281,7 +293,6 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   const process = await Process.findById(req.params.id);
   let { rowId, items } = req.body;
 
-  console.log("Updating rowId:", process);
   // Parse items if it's a string
   if (typeof items === "string") {
     items = JSON.parse(items);
@@ -427,7 +438,12 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   const vendorListProcess = await Process.findOne({ processId: "PR/R/001" });
   const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
 
-  if (!productsProcess || !itemListProcess || !vendorListProcess || !customerListProcess) {
+  if (
+    !productsProcess ||
+    !itemListProcess ||
+    !vendorListProcess ||
+    !customerListProcess
+  ) {
     return next(new ErrorHandler("Process not found", 404));
   }
 
