@@ -422,26 +422,32 @@ exports.getProcessRowHistory = catchAsyncErrors(async (req, res, next) => {
 
 // Search Details
 exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
-  const process = await Process.findOne({ processId: "DD/R/002A" });
+  const productsProcess = await Process.findOne({ processId: "DD/R/002A" });
   const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
   const vendorListProcess = await Process.findOne({ processId: "PR/R/001" });
+  const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
 
-  if (!process || !process.data) {
-    return ErrorHandler("Process not found", 404);
+  if (!productsProcess || !itemListProcess || !vendorListProcess || !customerListProcess) {
+    return next(new ErrorHandler("Process not found", 404));
   }
 
-  // Use Sets to remove duplicates
+  // Use Sets to remove duplicates from products
   const partNo = new Set();
   const partName = new Set();
   const type = new Set();
   const material = new Set();
 
+  // Use Sets to remove duplicates from item list
   const itemName = new Set();
   const itemGrade = new Set();
 
+  // Use Sets to remove duplicates from vendor list
   const vendorName = new Set();
 
-  process.data.forEach((row) => {
+  // Use Sets to remove duplicates from customer list
+  const customerName = new Set();
+
+  productsProcess.data.forEach((row) => {
     const pNo = row.items.find((i) => i.key === "PART NO")?.value;
     const pName = row.items.find((i) => i.key === "PART NAME")?.value;
     const pType = row.items.find((i) => i.key === "TYPE")?.value;
@@ -465,6 +471,11 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     if (vName) vendorName.add(vName);
   });
 
+  customerListProcess.data.forEach((row) => {
+    const cName = row.items.find((i) => i.key === "CUSTOMER NAME")?.value;
+    if (cName) customerName.add(cName);
+  });
+
   const response = [
     { key: "PART-NO", value: Array.from(partNo) },
     { key: "PART-NAME", value: Array.from(partName) },
@@ -473,6 +484,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "ITEM-NAME", value: Array.from(itemName) },
     { key: "VENDOR-NAME", value: Array.from(vendorName) },
     { key: "GRADE", value: Array.from(itemGrade) },
+    { key: "CUSTOMER-NAME", value: Array.from(customerName) },
   ];
 
   res.status(200).json({

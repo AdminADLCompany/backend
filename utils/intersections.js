@@ -65,209 +65,140 @@ exports.handleAddIntersection = catchAsyncErrors(
     // ---- MR/R/003B (Action Taken -> Rework) ----
     if (process.processId === "MR/R/003B") {
       const moveToItem = items.find((i) => i.key === "MOVE TO");
+
       if (moveToItem && moveToItem.value === "Rework") {
         const rejectionProcess = await Process.findOne({
           processId: "MR/R/003",
         });
-        const rejectionRow = rejectionProcess?.data.id(rowDataId);
 
-        if (rejectionRow) {
-          const partNo = rejectionRow.items.find(
-            (i) => i.key === "PART NO"
-          )?.value;
-          const partName = rejectionRow.items.find(
-            (i) => i.key === "PART NAME"
-          )?.value;
-          const problemDesc = rejectionRow.items.find(
-            (i) => i.key === "PROBLEM DESCRIPTION"
-          )?.value;
-          const rejectStage = rejectionRow.items.find(
-            (i) => i.key === "REJECT STAGE"
-          )?.value;
-          const rejectQty =
-            rejectionRow.items.find((i) => i.key === "REJECT QTY")?.value || 0;
-
-          const verifiedBy = items.find((i) => i.key === "VERIFIED BY")?.value;
-          const status = items.find(
-            (i) => i.key === "ACTION PLAN STATUS"
-          )?.value;
-
-          const reworkProcess = await Process.findOne({
-            processId: "MR/R/003A",
-          });
-          if (reworkProcess) {
-            let reworkRow = {
-              items: [
-                { key: "PART NO", value: partNo, process: "value" },
-                { key: "PART NAME", value: partName, process: "value" },
-                {
-                  key: "PROBLEM DESCRIPTION",
-                  value: problemDesc,
-                  process: "value",
-                },
-                { key: "REWORK QTY", value: rejectQty, process: "value" },
-                { key: "REJECT STAGE", value: rejectStage, process: "value" },
-                {
-                  key: "ACTION PLAN",
-                  value: "QA/R/007A",
-                  process: "processId",
-                },
-                { key: "VERIFIED BY", value: verifiedBy, process: "value" },
-                { key: "STATUS", value: status, process: "value" },
-              ],
-              rowDataId,
-            };
-
-            reworkRow.items = await linkProcessIdItems(reworkRow.items);
-
-            reworkProcess.data.push(reworkRow);
-            reworkProcess.updatedBy = userId;
-            await reworkProcess.save();
-
-            await History.create({
-              collectionName: "Process",
-              documentId: reworkProcess._id,
-              rowId: reworkProcess.data[reworkProcess.data.length - 1]._id,
-              operation: "create",
-              oldData: null,
-              newData: reworkRow,
-              changedBy: userId,
-            });
-          } else {
-            throw new Error("Rework Process not found");
-          }
+        if (!rejectionProcess) {
+          throw new ErrorHandler("Rejection Process (MR/R/003) not found", 404);
         }
+
+        const rejectionRow = rejectionProcess.data.id(rowDataId);
+
+        if (!rejectionRow) {
+          throw new ErrorHandler(
+            `Row with ID ${rowDataId} not found in MR/R/003`,
+            404
+          );
+        }
+
+        const partNo = rejectionRow.items.find(
+          (i) => i.key === "PART NO"
+        )?.value;
+        const partName = rejectionRow.items.find(
+          (i) => i.key === "PART NAME"
+        )?.value;
+        const problemDesc = rejectionRow.items.find(
+          (i) => i.key === "PROBLEM DESCRIPTION"
+        )?.value;
+        const rejectStage = rejectionRow.items.find(
+          (i) => i.key === "REJECT STAGE"
+        )?.value;
+        const rejectQty =
+          rejectionRow.items.find((i) => i.key === "REJECT QTY")?.value || 0;
+
+        const verifiedBy = items.find((i) => i.key === "VERIFIED BY")?.value;
+        const status = items.find((i) => i.key === "ACTION PLAN STATUS")?.value;
+
+        const reworkProcess = await Process.findOne({
+          processId: "MR/R/003A",
+        });
+
+        if (!reworkProcess) {
+          throw new ErrorHandler("Rework Process (MR/R/003A) not found", 404);
+        }
+
+        let reworkRow = {
+          items: [
+            { key: "PART NO", value: partNo, process: "value" },
+            { key: "PART NAME", value: partName, process: "value" },
+            {
+              key: "PROBLEM DESCRIPTION",
+              value: problemDesc,
+              process: "value",
+            },
+            { key: "REWORK QTY", value: rejectQty, process: "value" },
+            { key: "REJECT STAGE", value: rejectStage, process: "value" },
+            {
+              key: "ACTION PLAN",
+              value: "QA/R/007A",
+              process: "processId",
+            },
+            { key: "VERIFIED BY", value: verifiedBy, process: "value" },
+            { key: "STATUS", value: status, process: "value" },
+          ],
+          rowDataId,
+        };
+
+        // Link internal process IDs safely
+        reworkRow.items = await linkProcessIdItems(reworkRow.items);
+
+        // Push row into rework process
+        reworkProcess.data.push(reworkRow);
+        reworkProcess.updatedBy = userId;
+        await reworkProcess.save();
+
+        // Log history
+        await History.create({
+          collectionName: "Process",
+          documentId: reworkProcess._id,
+          rowId: reworkProcess.data[reworkProcess.data.length - 1]._id,
+          operation: "create",
+          oldData: null,
+          newData: reworkRow,
+          changedBy: userId,
+        });
       }
     }
 
     // ---- MS/R/005 → MS/R/006 ---- (Quotation List -> Order List)
     else if (process.processId === "MS/R/005") {
       const moveToItem = items.find((i) => i.key === "QL STATUS");
+
       if (moveToItem && moveToItem.value === "OPEN") {
         const orderListProcess = await Process.findOne({
           processId: "MS/R/006",
         });
-        if (orderListProcess) {
-          const orderListRow = {
-            items: [
-              {
-                key: "DATE",
-                value: items.find((i) => i.key === "DATE")?.value,
-                process: "value",
-              },
-              {
-                key: "QUOTE NO",
-                value: items.find((i) => i.key === "QUOTATION NO")?.value,
-                process: "value",
-              },
-              {
-                key: "ENQ BY",
-                value: items.find((i) => i.key === "ENQ BY")?.value,
-                process: "value",
-              },
-              {
-                key: "CUSTOMER NAME",
-                value: items.find((i) => i.key === "CUSTOMER NAME")?.value,
-                process: "value",
-              },
-              {
-                key: "LOCATION",
-                value: items.find((i) => i.key === "LOCATION")?.value,
-                process: "value",
-              },
-              {
-                key: "DESCRIPTION",
-                value: items.find((i) => i.key === "DESCRIPTION")?.value,
-                process: "value",
-              },
-              {
-                key: "QTY",
-                value: items.find((i) => i.key === "QTY")?.value,
-                process: "value",
-              },
-              {
-                key: "UNITS",
-                value: items.find((i) => i.key === "UNITS")?.value,
-                process: "value",
-              },
-              { key: "VALUE", value: "", process: "value" },
-              { key: "ORDER DATE", value: "", process: "value" },
-              { key: "PO NO", value: "", process: "value" },
-              { key: "LEAD TIME", value: "", process: "value" },
-              { key: "INVOICE NO", value: "", process: "value" },
-              { key: "DELIVERY QTY", value: "", process: "value" },
-              { key: "PENDING QTY", value: "", process: "value" },
-              { key: "DELIVERY DATE", value: "", process: "value" },
-              { key: "GRN", value: "", process: "value" },
-              { key: "PAYMENT", value: "", process: "value" },
-            ],
-            rowDataId,
-          };
-          orderListProcess.data.push(orderListRow);
-          orderListProcess.updatedBy = userId;
-          await orderListProcess.save();
+
+        if (!orderListProcess) {
+          throw new ErrorHandler(
+            "Order List Process (MS/R/006) not found",
+            404
+          );
         }
-      }
-    }
 
-    // ---- PR/R/003A → QA/R/003 ---- (Inward -> Incoming Inspection)
-    else if (process.processId === "PR/R/003A") {
-      const inspectionProcess = await Process.findOne({
-        processId: "QA/R/003",
-      });
-      const procurementProcess = await Process.findOne({
-        processId: "PR/R/003",
-      });
-
-      if (!inspectionProcess || !procurementProcess) return;
-
-      // find the data in procurementProcess with the rowDataId
-      const procurementRow = procurementProcess.data.find(
-        (row) => row._id.toString() === rowDataId
-      );
-
-      if (!procurementRow) return;
-
-      const isMoving = items.find(
-        (i) => i.key === "QC QUALITY INSPECTION"
-      )?.value;
-
-      if (inspectionProcess && isMoving === "Move to Inspection") {
-        const inspectionRow = {
+        const orderListRow = {
           items: [
             {
-              key: "PART NO",
-              value: procurementRow.items.find((i) => i.key === "PART NO")
-                ?.value,
+              key: "DATE",
+              value: items.find((i) => i.key === "DATE")?.value,
               process: "value",
             },
             {
-              key: "PART NAME",
-              value: procurementRow.items.find((i) => i.key === "PART NAME")
-                ?.value,
+              key: "QUOTE NO",
+              value: items.find((i) => i.key === "QUOTATION NO")?.value,
               process: "value",
             },
             {
-              key: "ITEM CATEGORY",
-              value: procurementRow.items.find((i) => i.key === "ITEM CATEGORY")
-                ?.value,
+              key: "ENQ BY",
+              value: items.find((i) => i.key === "ENQ BY")?.value,
               process: "value",
             },
             {
-              key: "ITEM CODE",
-              value: procurementRow.items.find((i) => i.key === "ITEM CODE")
-                ?.value,
+              key: "CUSTOMER NAME",
+              value: items.find((i) => i.key === "CUSTOMER NAME")?.value,
               process: "value",
             },
             {
-              key: "ITEM NAME",
-              value: procurementRow.items.find((i) => i.key === "ITEM NAME")
-                ?.value,
+              key: "LOCATION",
+              value: items.find((i) => i.key === "LOCATION")?.value,
               process: "value",
             },
             {
-              key: "GRADE",
-              value: procurementRow.items.find((i) => i.key === "GRADE")?.value,
+              key: "DESCRIPTION",
+              value: items.find((i) => i.key === "DESCRIPTION")?.value,
               process: "value",
             },
             {
@@ -277,44 +208,134 @@ exports.handleAddIntersection = catchAsyncErrors(
             },
             {
               key: "UNITS",
-              value: procurementRow.items.find((i) => i.key === "UNITS")?.value,
+              value: items.find((i) => i.key === "UNITS")?.value,
               process: "value",
             },
-            {
-              key: "VENDOR NAME",
-              value: procurementRow.items.find((i) => i.key === "VENDOR-NAME")
-                ?.value,
-              process: "value",
-            },
-            {
-              key: "INVOICE NO",
-              value: items.find((i) => i.key === "INVOICE NO")?.value,
-              process: "value",
-            },
-            {
-              key: "DELIVERY DATE",
-              value: items.find((i) => i.key === "DELIVERY DATE")?.value,
-              process: "date",
-            },
-            {
-              key: "QUALITY INSPECTION",
-              value: "QA/R/003A",
-              process: "processId",
-            },
-            { key: "INSPECTION-STATUS", value: "", process: "select" },
+            { key: "VALUE", value: "", process: "value" },
+            { key: "ORDER DATE", value: "", process: "value" },
+            { key: "PO NO", value: "", process: "value" },
+            { key: "LEAD TIME", value: "", process: "value" },
+            { key: "INVOICE NO", value: "", process: "value" },
+            { key: "DELIVERY QTY", value: "", process: "value" },
+            { key: "PENDING QTY", value: "", process: "value" },
+            { key: "DELIVERY DATE", value: "", process: "value" },
+            { key: "GRN", value: "", process: "value" },
+            { key: "PAYMENT", value: "", process: "value" },
           ],
           rowDataId,
         };
 
-        inspectionRow.items = await linkProcessIdItems(inspectionRow.items);
+        orderListProcess.data.push(orderListRow);
+        orderListProcess.updatedBy = userId;
 
-        inspectionProcess.data.push(inspectionRow);
-        inspectionProcess.updatedBy = userId;
-        await inspectionProcess.save();
+        await orderListProcess.save();
       }
     }
 
-    // --- MR/R/001 → PR/R/003 ---- Production Plan -> Procurement Register
+    // ---- PR/R/003A → QA/R/003A ---- Procurement → Inspection
+    else if (process.processId === "PR/R/003A") {
+      const inspectionProcess = await Process.findOne({
+        processId: "QA/R/003",
+      });
+      const procurementProcess = await Process.findOne({
+        processId: "PR/R/003",
+      });
+
+      if (!inspectionProcess)
+        throw new ErrorHandler("Inspection Process (QA/R/003) not found", 404);
+      if (!procurementProcess)
+        throw new ErrorHandler("Procurement Process (PR/R/003) not found", 404);
+
+      const procurementRow = procurementProcess.data.find(
+        (row) => row._id.toString() === rowDataId
+      );
+      if (!procurementRow)
+        throw new ErrorHandler("Procurement row not found", 404);
+
+      const isMoving = items.find(
+        (i) => i.key === "QC QUALITY INSPECTION"
+      )?.value;
+      if (isMoving !== "Move to Inspection") return;
+
+      const inspectionRow = {
+        items: [
+          {
+            key: "PART NO",
+            value: procurementRow.items.find((i) => i.key === "PART NO")?.value,
+            process: "value",
+          },
+          {
+            key: "PART NAME",
+            value: procurementRow.items.find((i) => i.key === "PART NAME")
+              ?.value,
+            process: "value",
+          },
+          {
+            key: "ITEM CATEGORY",
+            value: procurementRow.items.find((i) => i.key === "ITEM CATEGORY")
+              ?.value,
+            process: "value",
+          },
+          {
+            key: "ITEM CODE",
+            value: procurementRow.items.find((i) => i.key === "ITEM CODE")
+              ?.value,
+            process: "value",
+          },
+          {
+            key: "ITEM NAME",
+            value: procurementRow.items.find((i) => i.key === "ITEM NAME")
+              ?.value,
+            process: "value",
+          },
+          {
+            key: "GRADE",
+            value: procurementRow.items.find((i) => i.key === "GRADE")?.value,
+            process: "value",
+          },
+          {
+            key: "QTY",
+            value: items.find((i) => i.key === "QTY")?.value,
+            process: "value",
+          },
+          {
+            key: "UNITS",
+            value: procurementRow.items.find((i) => i.key === "UNITS")?.value,
+            process: "value",
+          },
+          {
+            key: "VENDOR NAME",
+            value: procurementRow.items.find((i) => i.key === "VENDOR-NAME")
+              ?.value,
+            process: "value",
+          },
+          {
+            key: "INVOICE NO",
+            value: items.find((i) => i.key === "INVOICE NO")?.value,
+            process: "value",
+          },
+          {
+            key: "DELIVERY DATE",
+            value: items.find((i) => i.key === "DELIVERY DATE")?.value,
+            process: "date",
+          },
+          {
+            key: "QUALITY INSPECTION",
+            value: "QA/R/003A",
+            process: "processId",
+          },
+          { key: "INSPECTION-STATUS", value: "", process: "select" },
+        ],
+        rowDataId,
+      };
+
+      inspectionRow.items = await linkProcessIdItems(inspectionRow.items);
+      inspectionProcess.data.push(inspectionRow);
+      inspectionProcess.updatedBy = userId;
+      await inspectionProcess.save();
+    }
+
+    // ---- MR/R/001 → PR/R/003 ---- Production Plan → Procurement Register
     else if (process.processId === "MR/R/001") {
       const procurementRegisterProcess = await Process.findOne({
         processId: "PR/R/003",
@@ -323,10 +344,17 @@ exports.handleAddIntersection = catchAsyncErrors(
       const vendorListProcess = await Process.findOne({
         processId: "PR/R/004",
       });
-
       const BOM = await Process.findOne({ processId: "DD/R/002" });
       const Products = await Process.findOne({ processId: "DD/R/002A" });
-      if (!procurementRegisterProcess || !BOM || !Products) return;
+
+      if (!procurementRegisterProcess)
+        throw new ErrorHandler(
+          "Procurement Register (PR/R/003) not found",
+          404
+        );
+      if (!BOM) throw new ErrorHandler("BOM (DD/R/002) not found", 404);
+      if (!Products)
+        throw new ErrorHandler("Products (DD/R/002A) not found", 404);
 
       const MoveItem = items.find((i) => i.key === "RM")?.value;
       if (MoveItem !== "Blue") return;
@@ -370,20 +398,12 @@ exports.handleAddIntersection = catchAsyncErrors(
           const totalQty = parseFloat(b["QTY"] || 0) * planQty;
 
           const inputItemCode = b["ITEM CODE"];
-
           const matchRow = itemListProcess.data.find((itemRow) => {
             const rowItemCode = itemRow.items
               .find((i) => i.key === "ITEM CODE")
               ?.value?.trim();
             return rowItemCode === inputItemCode;
           });
-
-          // const vendorNameMatch = vendorListProcess.data.find((vendorRow) => {
-          //   const vendorItemCategory = vendorRow.items
-          //     .find((i) => i.key === "ITEM CATEGORY")
-          //     ?.value?.trim();
-          //   return vendorItemCategory ===  matchRow.items.find((i) => i.key === "ITEM CATEGORY")?.value;
-          // });
 
           let procurementRegisterRow = {
             items: [
@@ -417,7 +437,6 @@ exports.handleAddIntersection = catchAsyncErrors(
           procurementRegisterRow.items = await linkProcessIdItems(
             procurementRegisterRow.items
           );
-
           procurementRegisterProcess.data.push(procurementRegisterRow);
         }
       }
@@ -426,10 +445,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       await procurementRegisterProcess.save();
     }
 
-    // ---- DD/R/002 ---- Product Code Generation ----
+    // ---- DD/R/002 ---- Product Code Generation
     else if (process.processId === "DD/R/002") {
       const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
-      if (!itemListProcess) return null;
+      if (!itemListProcess)
+        throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
 
       const inputItemName = items
         .find((i) => i.key === "ITEM NAME")
@@ -457,11 +477,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       );
     }
 
-    // ---- PR/R/002 → ST/R/006 ---- Item List -> Stock Data ----
+    // ---- PR/R/002 → ST/R/006 ---- Item List → Stock Data
     else if (process.processId === "PR/R/002") {
       const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
-
-      if (!stockDataProcess) return;
+      if (!stockDataProcess)
+        throw new ErrorHandler("Stock Data Process (ST/R/006) not found", 404);
 
       const itemName = items.find((i) => i.key === "ITEM NAME")?.value;
       const itemCode = items.find((i) => i.key === "ITEM CODE")?.value;
@@ -492,7 +512,10 @@ exports.handleAddIntersection = catchAsyncErrors(
       const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
       const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
 
-      if (!storeRegisterProcess || !itemListProcess) return;
+      if (!storeRegisterProcess || !itemListProcess) throw new ErrorHandler(
+        "Store Register Process (ST/R/005) or Item List Process (PR/R/002) not found",
+        404
+      );
 
       const inputCode = items.find((i) => i.key === "ITEM CODE")?.value;
 
@@ -503,7 +526,10 @@ exports.handleAddIntersection = catchAsyncErrors(
         return rowItemCode === inputCode;
       });
 
-      if (!matchedRow) return;
+      if (!matchedRow) throw new ErrorHandler(
+        "Item not found in Item List Process (PR/R/002)",
+        404
+      );
 
       const itemName = matchedRow.items.find(
         (i) => i.key === "ITEM NAME"
@@ -552,7 +578,10 @@ exports.handleAddIntersection = catchAsyncErrors(
       if (stockDataProcess) {
         const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-        if (!itemCode) return;
+        if (!itemCode) throw new ErrorHandler(
+          "Item Code not found in Item List Process (PR/R/002)",
+          404
+        );
 
         // Find if stock entry for this item already exists
         const existingStockRow = stockDataProcess.data.find(
@@ -614,7 +643,10 @@ exports.handleAddIntersection = catchAsyncErrors(
         return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
       });
 
-      if (!matchedRow || !storeRegisterProcess) return;
+      if (!matchedRow || !storeRegisterProcess) throw new ErrorHandler(
+        "Item not found in Store Register Process (ST/R/005)",
+        404
+      );
 
       const storeRegisterRow = {
         items: [
@@ -673,7 +705,7 @@ exports.handleAddIntersection = catchAsyncErrors(
         const itemCode = items.find((i) => i.key === "PART NO")?.value;
         const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-        if (!itemCode) return;
+        if (!itemCode) throw new ErrorHandler("Item code not found", 404);
 
         // 🔍 Find existing stock entry for this item
         const existingStockRow = stockDataProcess.data.find(
@@ -728,7 +760,7 @@ exports.handleAddIntersection = catchAsyncErrors(
       }
     }
 
-    // MR/R/002A
+    // ---- MR/R/002A -> MR/R/002 (OEE Calculation) ----
     else if (process.processId === "MR/R/002A") {
       const breakHourProcess = await Process.findOne({
         processId: "MR/R/002B",
@@ -737,7 +769,7 @@ exports.handleAddIntersection = catchAsyncErrors(
         processId: "MR/R/002",
       });
       if (!breakHourProcess || !productionReportProcess)
-        throw new Error("No production report or Break Process Found");
+        throw new ErrorHandler("No production report or Break Process Found", 404);
 
       // find the matchrow of the production report by _id of the each data row with rowDataId we have now 69197d26a7e0a3fff476f0b2
       const productionReportRow = productionReportProcess.data.find(
@@ -745,7 +777,7 @@ exports.handleAddIntersection = catchAsyncErrors(
       );
 
       // if (!productionReportRow) throw new Error("No production report row found");
-      if (!productionReportRow) return;
+      if (!productionReportRow) throw new ErrorHandler("No production report row found", 404);
 
       const start = toMinutes(
         productionReportRow.items.find((i) => i.key === "START TIME")?.value
@@ -801,8 +833,16 @@ exports.handleAddIntersection = catchAsyncErrors(
             value: asVal("COMMUNICATION").toString(),
             process: "value",
           },
-          { key: "SETTINGS", value: settings.toString() || "", process: "value" },
-          { key: "SETUP LOSS", value: setupLoss.toString() || "", process: "value" },
+          {
+            key: "SETTINGS",
+            value: settings.toString() || "",
+            process: "value",
+          },
+          {
+            key: "SETUP LOSS",
+            value: setupLoss.toString() || "",
+            process: "value",
+          },
           ...[
             "TOOL CHANGE",
             "VERIFICATION",
