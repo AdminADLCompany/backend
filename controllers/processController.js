@@ -220,7 +220,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     if (item.process === "processId" && item.value) {
       const p = await Process.findOne({ processId: item.value });
       if (p?._id) item.value = `processId - ${p._id}`;
-      item.process = "";
+      item.process = item.key === "PROTO" ? "red" : "value";
     }
   }
 
@@ -234,6 +234,9 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
     const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
     const cycleTime = Number(items.find((i) => i.key === "CYCLE TIME")?.value);
+    const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
+    const reject = Number(items.find((i) => i.key === "REJECT")?.value);
+    const oeeItem = items.find((i) => i.key === "OEE");
 
     const end = endRaw < start ? endRaw + 1440 : endRaw;
     const totalTime = end - start;
@@ -254,6 +257,17 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     // ---- update PLAN field ----
     const planItem = items.find((i) => i.key === "PLAN");
     if (planItem) planItem.value = String(plan);
+
+    const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
+    let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
+    breakHourProcessItem.process = breakHourItem.toString();
+
+    const OEE =
+      (((actual / plan) * ((actual - reject) / actual)) *
+        (workingTime - Number(breakHourItem)) /
+        workingTime) *
+      100;
+    oeeItem.value = Math.floor(OEE);
   }
 
   // ---------------- MS/R/005 (Quotation) ----------------
@@ -321,6 +335,46 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
       });
       items[i].value = result.secure_url;
     }
+  }
+
+  if (process.processId === "MR/R/002") {
+    const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
+    const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
+    const cycleTime = Number(items.find((i) => i.key === "CYCLE TIME")?.value);
+    const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
+    const reject = Number(items.find((i) => i.key === "REJECT")?.value);
+    const oeeItem = items.find((i) => i.key === "OEE");
+
+    const end = endRaw < start ? endRaw + 1440 : endRaw;
+    const totalTime = end - start;
+
+    // ---- calculate break minutes ----
+    let breakMinutes = 0;
+    sceduledLoss.forEach((b) => {
+      if (b.from === "nil") return;
+      let s = toMinutes(b.from),
+        e = toMinutes(b.to);
+      if (e < s) e += 1440;
+      if (s < end && e > start) breakMinutes += b.time;
+    });
+
+    const workingTime = totalTime - breakMinutes;
+    const plan = Math.floor(workingTime / cycleTime);
+
+    // ---- update PLAN field ----
+    const planItem = items.find((i) => i.key === "PLAN");
+    if (planItem) planItem.value = String(plan);
+
+    const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
+    let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
+    breakHourProcessItem.process = breakHourItem.toString();
+
+    const OEE =
+      (((actual / plan) * ((actual - reject) / actual)) *
+        (workingTime - Number(breakHourItem)) /
+        workingTime) *
+      100;
+    oeeItem.value = Math.floor(OEE);
   }
 
   // Update row data

@@ -715,6 +715,37 @@ exports.handleAddIntersection = catchAsyncErrors(
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
+      const totalTime =
+        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
+        Number(productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value);
+
+      const actualPlan =
+        (totalTime - (settings || 0)) /
+        Number(productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value);
+
+      const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
+      const actualItem = productionReportRow.items.find((i) => i.key === "ACTUAL")?.value;
+      const cycleTime = productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value;
+      const reject = Number(productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0);
+      const breakHour = productionReportRow.items.find((i) => i.key === "BREAK HOUR");
+      const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
+
+      let valueOfProcess = (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
+      let oeeCalculation = (((Number(actualItem) / Number(actualPlan)) * ((Number(actualItem) - reject) / Number(actualItem))) *
+        (totalTime - valueOfProcess) /
+        totalTime) *
+      100;
+
+      if (!planItem) throw new ErrorHandler("PLAN field not found", 404);
+      breakHour.process = valueOfProcess.toString();
+      planItem.value = actualPlan.toString();
+      oeeItem.value = Math.floor(oeeCalculation).toString();
+
+      productionReportProcess.markModified("data");
+      productionReportProcess.updatedBy = userId;
+
+      await productionReportProcess.save();
+
       // ---- BREAK VALUES ----
       const breakValues = {};
       sceduledLoss.forEach((b) => {
@@ -912,6 +943,13 @@ exports.handleAddIntersection = catchAsyncErrors(
         orderListProcess.updatedBy = userId;
         await orderListProcess.save();
       }
+    }
+
+    //
+    else if (process.processId === "DD/R/012") {
+      const NPDRegisterProcess = await Process.findOne({
+        processId: "DD/R/010",
+      });
     }
   }
 );
@@ -1544,104 +1582,154 @@ exports.handleUpdateIntersection = catchAsyncErrors(
         }
       }
     }
+
+    // ---- DD/R/010
+    else if (process.processId === "DD/R/012") {
+      const NPDRegisterProcess = await Process.findOne({
+        processId: "DD/R/010",
+      });
+
+      if (!NPDRegisterProcess)
+        throw new ErrorHandler("NPD Register Process not found", 404);
+
+      const correspondingItem = NPDRegisterProcess.data.find(
+        (d) => d._id.toString() === row.rowDataId.toString()
+      );
+
+      if (!correspondingItem)
+        throw new ErrorHandler("Corresponding NPD row not found", 404);
+
+      const protoItem = correspondingItem.items.find((i) => i.key === "PROTO");
+
+      if (!protoItem) throw new ErrorHandler("PROTO item not found", 404);
+
+      const hasPending = items.some((i) => i.value === "Pending");
+      const hasInProgress = items.some((i) => i.value === "In Progress");
+      const allCompleted =
+        items.length > 0 && items.every((i) => i.value === "Completed");
+
+      if (hasPending) {
+        protoItem.process = "red";
+      } else if (hasInProgress) {
+        protoItem.process = "orange";
+      } else if (allCompleted) {
+        protoItem.process = "green";
+      } else {
+        protoItem.process = "gray"; // fallback safety
+      }
+
+      NPDRegisterProcess.markModified("data");
+      NPDRegisterProcess.updatedBy = userId;
+
+      await NPDRegisterProcess.save();
+    }
+
+    // 
+    else if (process.processId === "MR/R/002A"){
+
+    }
   }
 );
 
-exports.handleDeleteIntersection = catchAsyncErrors(async (process, rowId, userId) => {
-  // Utility function to delete linked rows safely
-  const deleteLinkedRows = async (targetProcessId, filterFn) => {
-    const target = await Process.findOne({ processId: targetProcessId });
-    if (!target) return;
+exports.handleDeleteIntersection = catchAsyncErrors(
+  async (process, rowId, userId) => {
+    // Utility function to delete linked rows safely
+    const deleteLinkedRows = async (targetProcessId, filterFn) => {
+      const target = await Process.findOne({ processId: targetProcessId });
+      if (!target) return;
 
-    const rowsToDelete = target.data.filter(filterFn);
-    target.data = target.data.filter((r) => !rowsToDelete.includes(r));
-    target.updatedBy = userId;
-    await target.save();
-  };
+      const rowsToDelete = target.data.filter(filterFn);
+      target.data = target.data.filter((r) => !rowsToDelete.includes(r));
+      target.updatedBy = userId;
+      await target.save();
+    };
 
-  // ---- DD/R/001 → DD/R/002, DD/R/002A, DD/R/003, DD/R/004, DD/R/005, QA/R/009 ---- Product List.
-  if (process.processId === "DD/R/001") {
-    const targets = [
-      "DD/R/002",
-      "DD/R/002A",
-      "DD/R/003",
-      "DD/R/004",
-      "DD/R/005",
-      "QA/R/009",
-    ];
-    for (const id of targets)
-      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
-  }
+    // ---- DD/R/001 → DD/R/002, DD/R/002A, DD/R/003, DD/R/004, DD/R/005, QA/R/009 ---- Product List.
+    if (process.processId === "DD/R/001") {
+      const targets = [
+        "DD/R/002",
+        "DD/R/002A",
+        "DD/R/003",
+        "DD/R/004",
+        "DD/R/005",
+        "QA/R/009",
+      ];
+      for (const id of targets)
+        await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+    }
 
-  // ---- DD/R/002 → DD/R/012, DD/R/014, DD/R/008 ---- NPD Register
-  else if (process.processId === "DD/R/010") {
-    const targets = ["DD/R/012", "DD/R/014", "DD/R/008"];
-    for (const id of targets)
-      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
-  }
+    // ---- DD/R/002 → DD/R/012, DD/R/014, DD/R/008 ---- NPD Register
+    else if (process.processId === "DD/R/010") {
+      const targets = ["DD/R/012", "DD/R/014", "DD/R/008"];
+      for (const id of targets)
+        await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MR/R/002 → MR/R/002A, MR/R/002B ---- Production Report
-  else if (process.processId === "MR/R/002") {
-    const targets = ["MR/R/002A", "MR/R/002B"];
-    for (const id of targets)
-      await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
-  }
+    // ---- MR/R/002 → MR/R/002A, MR/R/002B ---- Production Report
+    else if (process.processId === "MR/R/002") {
+      const targets = ["MR/R/002A", "MR/R/002B"];
+      for (const id of targets)
+        await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MR/R/003B → MR/R/003 ---- Rejection Report
-  else if (process.processId === "MR/R/003") {
-    await deleteLinkedRows("MR/R/003B", (row) => row.rowDataId === rowId);
-  }
+    // ---- MR/R/003B → MR/R/003 ---- Rejection Report
+    else if (process.processId === "MR/R/003") {
+      await deleteLinkedRows("MR/R/003B", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MR/R/003A → QA/R/007A ---- Rework Report
-  else if (process.processId === "MR/R/003A") {
-    await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
-  }
+    // ---- MR/R/003A → QA/R/007A ---- Rework Report
+    else if (process.processId === "MR/R/003A") {
+      await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- QA/R/003 → QA/R/003A ---- Incoming Inspection
-  else if (process.processId === "QA/R/003") {
-    await deleteLinkedRows("QA/R/003A", (row) => row.rowDataId === rowId);
-  }
+    // ---- QA/R/003 → QA/R/003A ---- Incoming Inspection
+    else if (process.processId === "QA/R/003") {
+      await deleteLinkedRows("QA/R/003A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- QA/R/007 → QA/R/007A ---- Customer Complaint Register
-  else if (process.processId === "QA/R/007") {
-    await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
-  }
+    // ---- QA/R/007 → QA/R/007A ---- Customer Complaint Register
+    else if (process.processId === "QA/R/007") {
+      await deleteLinkedRows("QA/R/007A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- QA/F/005 → QA/F/005A ---- Calibration Register
-  else if (process.processId === "QA/F/005") {
-    await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
-  }
+    // ---- QA/F/005 → QA/F/005A ---- Calibration Register
+    else if (process.processId === "QA/F/005") {
+      await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MR/R/005 → MR/R/005A ---- Improvement Status
-  else if (process.processId === "MR/R/005") {
-    await deleteLinkedRows("MR/R/005A", (row) => row.rowDataId === rowId);
-  }
+    // ---- MR/R/005 → MR/R/005A ---- Improvement Status
+    else if (process.processId === "MR/R/005") {
+      await deleteLinkedRows("MR/R/005A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MN/R/003 → QA/F/005A ---- Maintenance Report
-  else if (process.processId === "MN/R/003") {
-    await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
-  }
+    // ---- MN/R/003 → QA/F/005A ---- Maintenance Report
+    else if (process.processId === "MN/R/003") {
+      await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
+    }
 
-  // ---- MR/R/001 → PR/R/003 ---- Production Plan
-  else if (process.processId === "MR/R/001") {
-    const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
-    const row = process.data.id(rowId);
-    const planNumber = row.items.find((i) => i.key === "PLAN NO")?.value;
+    // ---- MR/R/001 → PR/R/003 ---- Production Plan
+    else if (process.processId === "MR/R/001") {
+      const procurementProcess = await Process.findOne({
+        processId: "PR/R/003",
+      });
+      const row = process.data.id(rowId);
+      const planNumber = row.items.find((i) => i.key === "PLAN NO")?.value;
 
-    if (procurementProcess) {
-      const rowsToDelete = procurementProcess.data.filter(
-        (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
-      );
-      procurementProcess.data = procurementProcess.data.filter(
-        (r) => !rowsToDelete.includes(r)
-      );
-      procurementProcess.updatedBy = userId;
-      await procurementProcess.save();
+      if (procurementProcess) {
+        const rowsToDelete = procurementProcess.data.filter(
+          (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
+        );
+        procurementProcess.data = procurementProcess.data.filter(
+          (r) => !rowsToDelete.includes(r)
+        );
+        procurementProcess.updatedBy = userId;
+        await procurementProcess.save();
+      }
+    }
+
+    // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
+    else if (process.processId === "PR/R/003") {
+      await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
     }
   }
-
-  // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
-  else if (process.processId === "PR/R/003") {
-    await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
-  }
-});
+);
