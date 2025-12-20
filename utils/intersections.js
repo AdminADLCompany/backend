@@ -363,36 +363,6 @@ exports.handleAddIntersection = catchAsyncErrors(
     }
 
     // ---- DD/R/002 ---- Product Code Generation
-    else if (process.processId === "DD/R/002") {
-      const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
-      if (!itemListProcess)
-        throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
-
-      const inputItemName = items
-        .find((i) => i.key === "ITEM NAME")
-        ?.value?.trim();
-      const inputItemGrade = items
-        .find((i) => i.key === "ITEM GRADE")
-        ?.value?.trim();
-      if (!inputItemName || !inputItemGrade) return null;
-
-      const matchedRow = itemListProcess.data.find((itemRow) => {
-        const rowItemName = itemRow.items
-          .find((i) => i.key === "ITEM NAME")
-          ?.value?.trim();
-        const rowItemGrade = itemRow.items
-          .find((i) => i.key === "ITEM GRADE")
-          ?.value?.trim();
-        return (
-          rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
-          rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
-        );
-      });
-
-      return (
-        matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? null
-      );
-    }
 
     // ---- PR/R/002 → ST/R/006 ---- Item List → Stock Data
     else if (process.processId === "PR/R/002") {
@@ -717,24 +687,39 @@ exports.handleAddIntersection = catchAsyncErrors(
 
       const totalTime =
         Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-        Number(productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value);
+        Number(
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value
+        );
 
       const actualPlan =
         (totalTime - (settings || 0)) /
-        Number(productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value);
+        Number(
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value
+        );
 
       const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
-      const actualItem = productionReportRow.items.find((i) => i.key === "ACTUAL")?.value;
-      const cycleTime = productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value;
-      const reject = Number(productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0);
-      const breakHour = productionReportRow.items.find((i) => i.key === "BREAK HOUR");
+      const actualItem = productionReportRow.items.find(
+        (i) => i.key === "ACTUAL"
+      )?.value;
+      const cycleTime = productionReportRow.items.find(
+        (i) => i.key === "CYCLE TIME"
+      )?.value;
+      const reject = Number(
+        productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0
+      );
+      const breakHour = productionReportRow.items.find(
+        (i) => i.key === "BREAK HOUR"
+      );
       const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
 
-      let valueOfProcess = (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
-      let oeeCalculation = (((Number(actualItem) / Number(actualPlan)) * ((Number(actualItem) - reject) / Number(actualItem))) *
-        (totalTime - valueOfProcess) /
-        totalTime) *
-      100;
+      let valueOfProcess =
+        (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
+      let oeeCalculation =
+        (((Number(actualItem) / Number(actualPlan)) *
+          ((Number(actualItem) - reject) / Number(actualItem)) *
+          (totalTime - valueOfProcess)) /
+          totalTime) *
+        100;
 
       if (!planItem) throw new ErrorHandler("PLAN field not found", 404);
       breakHour.process = valueOfProcess.toString();
@@ -833,7 +818,7 @@ exports.handleAddIntersection = catchAsyncErrors(
         throw new ErrorHandler("No order list process found", 404);
 
       if (isMoving === "ORDER") {
-        const orderListRow = {
+        let orderListRow = {
           items: [
             {
               key: "DATE",
@@ -842,17 +827,17 @@ exports.handleAddIntersection = catchAsyncErrors(
             },
             {
               key: "QUOTE NO",
-              value: "",
+              value: items.find((i) => i.key === "QUOTATION NO")?.value,
               process: "value",
             },
             {
               key: "PART NO",
-              value: items.find((i) => i.key === "PART NO")?.value,
+              value: items.find((i) => i.key === "PART-NO")?.value,
               process: "value",
             },
             {
               key: "PART NAME",
-              value: items.find((i) => i.key === "PART NAME")?.value,
+              value: items.find((i) => i.key === "PART-NAME")?.value,
               process: "value",
             },
             {
@@ -906,38 +891,15 @@ exports.handleAddIntersection = catchAsyncErrors(
               process: "value",
             },
             {
-              key: "INVOICE NO",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "DELIVERY QTY",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "PENDING QTY",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "DELIVERY DATE",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "GRN",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "PAYMENT",
-              value: "",
-              process: "select",
+              key: "DOCKET",
+              value: "MS/R/006A",
+              process: "processId",
             },
           ],
           rowDataId: row.rowDataId,
         };
+
+        orderListRow.items = await linkProcessIdItems(orderListRow.items);
 
         orderListProcess.data.push(orderListRow);
         orderListProcess.updatedBy = userId;
@@ -1051,7 +1013,7 @@ exports.handleUpdateIntersection = catchAsyncErrors(
           processId: "ST/R/006",
         });
         if (orderListProcess) {
-          const orderListRow = {
+          let orderListRow = {
             items: [
               {
                 key: "DATE",
@@ -1060,17 +1022,17 @@ exports.handleUpdateIntersection = catchAsyncErrors(
               },
               {
                 key: "QUOTE NO",
-                value: "",
+                value: items.find((i) => i.key === "QUOTATION NO")?.value,
                 process: "value",
               },
               {
                 key: "PART NO",
-                value: items.find((i) => i.key === "PART NO")?.value,
+                value: items.find((i) => i.key === "PART-NO")?.value,
                 process: "value",
               },
               {
                 key: "PART NAME",
-                value: items.find((i) => i.key === "PART NAME")?.value,
+                value: items.find((i) => i.key === "PART-NAME")?.value,
                 process: "value",
               },
               {
@@ -1124,38 +1086,15 @@ exports.handleUpdateIntersection = catchAsyncErrors(
                 process: "value",
               },
               {
-                key: "INVOICE NO",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "DELIVERY QTY",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "PENDING QTY",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "DELIVERY DATE",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "GRN",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "PAYMENT",
-                value: "",
-                process: "select",
+                key: "DOCKET",
+                value: "MS/R/006A",
+                process: "processId",
               },
             ],
             rowDataId: rowId,
           };
+
+          orderListRow.items = await linkProcessIdItems(orderListRow.items);
 
           orderListProcess.data.push(orderListRow);
           orderListProcess.updatedBy = userId;
@@ -1386,7 +1325,7 @@ exports.handleUpdateIntersection = catchAsyncErrors(
       if (!inwardProcess) return;
       const isMoving = items.find((i) => i.key === "INSPECTION-STATUS")?.value;
 
-      if (isMoving === "Okay") {
+      if (isMoving === "Done") {
         const qualityInspectionProcess = await Process.findOne({
           processId: "QA/R/003A",
         });
@@ -1624,15 +1563,14 @@ exports.handleUpdateIntersection = catchAsyncErrors(
       await NPDRegisterProcess.save();
     }
 
-    // 
-    else if (process.processId === "MR/R/002A"){
-
+    //
+    else if (process.processId === "MR/R/002A") {
     }
   }
 );
 
 exports.handleDeleteIntersection = catchAsyncErrors(
-  async (process, rowId, userId) => {
+  async (process, rowId, userId, currentRow) => {
     // Utility function to delete linked rows safely
     const deleteLinkedRows = async (targetProcessId, filterFn) => {
       const target = await Process.findOne({ processId: targetProcessId });
@@ -1705,26 +1643,6 @@ exports.handleDeleteIntersection = catchAsyncErrors(
     // ---- MN/R/003 → QA/F/005A ---- Maintenance Report
     else if (process.processId === "MN/R/003") {
       await deleteLinkedRows("QA/F/005A", (row) => row.rowDataId === rowId);
-    }
-
-    // ---- MR/R/001 → PR/R/003 ---- Production Plan
-    else if (process.processId === "MR/R/001") {
-      const procurementProcess = await Process.findOne({
-        processId: "PR/R/003",
-      });
-      const row = process.data.id(rowId);
-      const planNumber = row.items.find((i) => i.key === "PLAN NO")?.value;
-
-      if (procurementProcess) {
-        const rowsToDelete = procurementProcess.data.filter(
-          (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
-        );
-        procurementProcess.data = procurementProcess.data.filter(
-          (r) => !rowsToDelete.includes(r)
-        );
-        procurementProcess.updatedBy = userId;
-        await procurementProcess.save();
-      }
     }
 
     // ---- PR/R/003 → MR/R/001 ---- Procurement Register X

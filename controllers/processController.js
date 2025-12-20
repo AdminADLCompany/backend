@@ -202,7 +202,12 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
   if (!rowDataId) rowDataId = new mongoose.Types.ObjectId();
   if (typeof items === "string") items = JSON.parse(items);
 
-  await handleAddIntersection(process, items, rowDataId, req.user._id);
+  const response = await handleAddIntersection(
+    process,
+    items,
+    rowDataId,
+    req.user._id
+  );
 
   // ---------------- Image Upload ----------------
   for (const item of items) {
@@ -263,8 +268,9 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     breakHourProcessItem.process = breakHourItem.toString();
 
     const OEE =
-      (((actual / plan) * ((actual - reject) / actual)) *
-        (workingTime - Number(breakHourItem)) /
+      (((actual / plan) *
+        ((actual - reject) / actual) *
+        (workingTime - Number(breakHourItem))) /
         workingTime) *
       100;
     oeeItem.value = Math.floor(OEE);
@@ -278,8 +284,36 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     if (qlStatusItem && quotationItem !== "ORDER") {
       const quotationNo = quotationItem?.value?.trim() || "";
       qlStatusItem.value =
-        quotationNo === "" ? "WAITING FOR CODE" : "WAITING FOR ORDER";
+        quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
     }
+  } else if (process.processId === "DD/R/002") {
+    const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
+    if (!itemListProcess)
+      throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
+
+    const inputItemName = items
+      .find((i) => i.key === "ITEM-NAME")
+      ?.value?.trim();
+    const inputItemGrade = items.find((i) => i.key === "GRADE")?.value?.trim();
+    if (!inputItemName || !inputItemGrade) return null;
+
+    const matchedRow = itemListProcess.data.find((itemRow) => {
+      const rowItemName = itemRow.items
+        .find((i) => i.key === "ITEM NAME")
+        ?.value?.trim();
+      const rowItemGrade = itemRow.items
+        .find((i) => i.key === "ITEM GRADE")
+        ?.value?.trim();
+      return (
+        rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
+        rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
+      );
+    });
+
+    const itemCode = items.find((i) => i.key === "ITEM CODE");
+    if (itemCode)
+      itemCode.value =
+        matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? "";
   }
 
   // ---------------- Save New Row ----------------
@@ -370,8 +404,9 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     breakHourProcessItem.process = breakHourItem.toString();
 
     const OEE =
-      (((actual / plan) * ((actual - reject) / actual)) *
-        (workingTime - Number(breakHourItem)) /
+      (((actual / plan) *
+        ((actual - reject) / actual) *
+        (workingTime - Number(breakHourItem))) /
         workingTime) *
       100;
     oeeItem.value = Math.floor(OEE);
@@ -418,14 +453,36 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Process not found", 404));
   }
 
-  await handleDeleteIntersection(process, rowId, req.user._id);
+  const currentRow = process.data.id(rowId);
 
-  const row = process.data.id(rowId);
-  if (!row) {
+  await handleDeleteIntersection(process, rowId, req.user._id, currentRow);
+
+  if (!currentRow) {
     return next(new ErrorHandler("Row not found", 404));
   }
 
-  const oldData = { ...row.toObject() };
+  if (process.processId === "MR/R/001") {
+    const procurementProcess = await Process.findOne({
+      processId: "PR/R/003",
+    });
+
+    const planNumber = currentRow.items.find(
+      (item) => item.key === "PLAN NO"
+    )?.value;
+
+    if (procurementProcess) {
+      const rowsToDelete = procurementProcess.data.filter(
+        (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
+      );
+      procurementProcess.data = procurementProcess.data.filter(
+        (r) => !rowsToDelete.includes(r)
+      );
+      procurementProcess.updatedBy = userId;
+      await procurementProcess.save();
+    }
+  }
+
+  const oldData = { ...currentRow.toObject() };
 
   // remove row
   process.data = process.data.filter((r) => r._id.toString() !== rowId);
