@@ -7,8 +7,7 @@ const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const cloudinary = require("../config/cloudinary");
 const {
-  handleAddIntersection,
-  handleUpdateIntersection,
+  handleIntersection,
   handleDeleteIntersection,
 } = require("../utils/intersections");
 
@@ -202,11 +201,12 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
   if (!rowDataId) rowDataId = new mongoose.Types.ObjectId();
   if (typeof items === "string") items = JSON.parse(items);
 
-  const response = await handleAddIntersection(
+  const response = await handleIntersection(
     process,
     items,
-    rowDataId,
-    req.user._id
+    req.user._id,
+    false,
+    { rowDataId }
   );
 
   // ---------------- Image Upload ----------------
@@ -418,14 +418,11 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   process.updatedBy = req.user._id;
   await process.save();
 
-  await handleUpdateIntersection(
-    process,
-    items,
+  await handleIntersection(process, items, req.user._id, true, {
     row,
-    req.user._id,
     rowId,
-    previousItems
-  );
+    previousItems,
+  });
 
   // Save history for main process update
   await History.create({
