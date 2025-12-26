@@ -24,7 +24,7 @@ const ImageUploadArray = [
 ];
 
 function toMinutes(t) {
-  if (!t || t === "nil") return null;
+  if (!t || t === "nil" || typeof t !== "string") return null;
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 }
@@ -202,138 +202,159 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
   if (!rowDataId) rowDataId = new mongoose.Types.ObjectId();
   if (typeof items === "string") items = JSON.parse(items);
 
-  const response = await handleAddIntersection(
+  if (!Array.isArray(items)) {
+    return next(new ErrorHandler("Items must be an array", 400));
+  }
+
+  const intersectionResponse = await handleAddIntersection(
     process,
     items,
     rowDataId,
     req.user._id
   );
 
-  // ---------------- Image Upload ----------------
-  for (const item of items) {
-    if (ImageUploadArray.includes(item.key) && req.files?.[item.key]) {
-      const file = req.files[item.key][0];
-      const upload = await cloudinary.uploader.upload(file.path, {
-        folder: "process_images",
+  if (intersectionResponse && intersectionResponse.success) {
+    // ---------------- Image Upload ----------------
+    for (const item of items) {
+      if (ImageUploadArray.includes(item.key) && req.files?.[item.key]) {
+        const file = req.files[item.key][0];
+        const upload = await cloudinary.uploader.upload(file.path, {
+          folder: "process_images",
+        });
+        item.value = upload.secure_url;
+      }
+    }
+
+    // --------------- Replace processId refs ---------------
+    for (const item of items) {
+      if (item.process === "processId" && item.value) {
+        const p = await Process.findOne({ processId: item.value });
+        if (p?._id) item.value = `processId - ${p._id}`;
+        item.process = item.key === "PROTO" ? "red" : "value";
+      }
+    }
+
+    // ---------------- MR/R/002 (OEE Calculation) ----------------
+    if (process.processId === "MR/R/002") {
+      const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
+      const breakHourProcess = await Process.findOne({
+        processId: "MR/R/002B",
       });
-      item.value = upload.secure_url;
-    }
-  }
+      if (!settingsProcess || !breakHourProcess)
+        return next(
+          new ErrorHandler("No Settings or Break Process Found", 404)
+        );
 
-  // --------------- Replace processId refs ---------------
-  for (const item of items) {
-    if (item.process === "processId" && item.value) {
-      const p = await Process.findOne({ processId: item.value });
-      if (p?._id) item.value = `processId - ${p._id}`;
-      item.process = item.key === "PROTO" ? "red" : "value";
-    }
-  }
-
-  // ---------------- MR/R/002 (OEE Calculation) ----------------
-  if (process.processId === "MR/R/002") {
-    const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
-    const breakHourProcess = await Process.findOne({ processId: "MR/R/002B" });
-    if (!settingsProcess || !breakHourProcess)
-      return next(new ErrorHandler("No Settings or Break Process Found", 404));
-
-    const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
-    const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
-    const cycleTime = Number(items.find((i) => i.key === "CYCLE TIME")?.value);
-    const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
-    const reject = Number(items.find((i) => i.key === "REJECT")?.value);
-    const oeeItem = items.find((i) => i.key === "OEE");
-
-    const end = endRaw < start ? endRaw + 1440 : endRaw;
-    const totalTime = end - start;
-
-    // ---- calculate break minutes ----
-    let breakMinutes = 0;
-    sceduledLoss.forEach((b) => {
-      if (b.from === "nil") return;
-      let s = toMinutes(b.from),
-        e = toMinutes(b.to);
-      if (e < s) e += 1440;
-      if (s < end && e > start) breakMinutes += b.time;
-    });
-
-    const workingTime = totalTime - breakMinutes;
-    const plan = Math.floor(workingTime / cycleTime);
-
-    // ---- update PLAN field ----
-    const planItem = items.find((i) => i.key === "PLAN");
-    if (planItem) planItem.value = String(plan);
-
-    const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
-    let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
-    breakHourProcessItem.process = breakHourItem.toString();
-
-    const OEE =
-      (((actual / plan) *
-        ((actual - reject) / actual) *
-        (workingTime - Number(breakHourItem))) /
-        workingTime) *
-      100;
-    oeeItem.value = Math.floor(OEE);
-  }
-
-  // ---------------- MS/R/005 (Quotation) ----------------
-  else if (process.processId === "MS/R/005") {
-    const quotationItem = items.find((i) => i.key === "QUOTATION NO");
-    const qlStatusItem = items.find((i) => i.key === "QL STATUS");
-
-    if (qlStatusItem && quotationItem !== "ORDER") {
-      const quotationNo = quotationItem?.value?.trim() || "";
-      qlStatusItem.value =
-        quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
-    }
-  } else if (process.processId === "DD/R/002") {
-    const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
-    if (!itemListProcess)
-      throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
-
-    const inputItemName = items
-      .find((i) => i.key === "ITEM-NAME")
-      ?.value?.trim();
-    const inputItemGrade = items.find((i) => i.key === "GRADE")?.value?.trim();
-    if (!inputItemName || !inputItemGrade) return null;
-
-    const matchedRow = itemListProcess.data.find((itemRow) => {
-      const rowItemName = itemRow.items
-        .find((i) => i.key === "ITEM NAME")
-        ?.value?.trim();
-      const rowItemGrade = itemRow.items
-        .find((i) => i.key === "ITEM GRADE")
-        ?.value?.trim();
-      return (
-        rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
-        rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
+      const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
+      const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
+      const cycleTime = Number(
+        items.find((i) => i.key === "CYCLE TIME")?.value
       );
+      const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
+      const reject = Number(items.find((i) => i.key === "REJECT")?.value);
+      const oeeItem = items.find((i) => i.key === "OEE");
+
+      const end = endRaw < start ? endRaw + 1440 : endRaw;
+      const totalTime = end - start;
+
+      // ---- calculate break minutes ----
+      let breakMinutes = 0;
+      sceduledLoss.forEach((b) => {
+        if (b.from === "nil") return;
+        let s = toMinutes(b.from),
+          e = toMinutes(b.to);
+        if (e < s) e += 1440;
+        if (s < end && e > start) breakMinutes += b.time;
+      });
+
+      const workingTime = totalTime - breakMinutes;
+      const plan = Math.floor(workingTime / cycleTime);
+
+      // ---- update PLAN field ----
+      const planItem = items.find((i) => i.key === "PLAN");
+      if (planItem) planItem.value = String(plan);
+
+      const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
+      let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
+      breakHourProcessItem.process = breakHourItem.toString();
+
+      const OEE =
+        (((actual / plan) *
+          ((actual - reject) / actual) *
+          (workingTime - Number(breakHourItem))) /
+          workingTime) *
+        100;
+      oeeItem.value = Math.floor(OEE);
+    }
+
+    // ---------------- MS/R/005 (Quotation) ----------------
+    else if (process.processId === "MS/R/005") {
+      const quotationItem = items.find((i) => i.key === "QUOTATION NO");
+      const qlStatusItem = items.find((i) => i.key === "QL STATUS");
+
+      if (qlStatusItem && quotationItem !== "ORDER") {
+        const quotationNo = quotationItem?.value?.trim() || "";
+        qlStatusItem.value =
+          quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
+      }
+    } else if (process.processId === "DD/R/002") {
+      const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
+      if (!itemListProcess)
+        throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
+
+      const inputItemName = items
+        .find((i) => i.key === "ITEM-NAME")
+        ?.value?.trim();
+      const inputItemGrade = items
+        .find((i) => i.key === "GRADE")
+        ?.value?.trim();
+      if (!inputItemName || !inputItemGrade) return null;
+
+      const matchedRow = itemListProcess.data.find((itemRow) => {
+        const rowItemName = itemRow.items
+          .find((i) => i.key === "ITEM NAME")
+          ?.value?.trim();
+        const rowItemGrade = itemRow.items
+          .find((i) => i.key === "ITEM GRADE")
+          ?.value?.trim();
+        return (
+          rowItemName?.toLowerCase() === inputItemName.toLowerCase() &&
+          rowItemGrade?.toLowerCase() === inputItemGrade.toLowerCase()
+        );
+      });
+
+      const itemCode = items.find((i) => i.key === "ITEM CODE");
+      if (itemCode)
+        itemCode.value =
+          matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? "";
+    }
+
+    // ---------------- Save New Row ----------------
+    const newRow = { items, rowDataId };
+    process.data.push(newRow);
+    process.updatedBy = req.user._id;
+    await process.save();
+
+    // ---------------- Log History ----------------
+    await History.create({
+      collectionName: "Process",
+      documentId: process._id,
+      rowId: process.data[process.data.length - 1]._id,
+      operation: "create",
+      oldData: null,
+      newData: newRow,
+      changedBy: req.user._id,
     });
 
-    const itemCode = items.find((i) => i.key === "ITEM CODE");
-    if (itemCode)
-      itemCode.value =
-        matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? "";
+    res.status(200).json({ success: true, process });
+  } else {
+    return next(
+      new ErrorHandler(
+        intersectionResponse?.message || "Intersection Processing Failed",
+        intersectionResponse?.statusCode || 400
+      )
+    );
   }
-
-  // ---------------- Save New Row ----------------
-  const newRow = { items, rowDataId };
-  process.data.push(newRow);
-  process.updatedBy = req.user._id;
-  await process.save();
-
-  // ---------------- Log History ----------------
-  await History.create({
-    collectionName: "Process",
-    documentId: process._id,
-    rowId: process.data[process.data.length - 1]._id,
-    operation: "create",
-    oldData: null,
-    newData: newRow,
-    changedBy: req.user._id,
-  });
-
-  res.status(200).json({ success: true, process });
 });
 
 // UPDATE row by rowId
@@ -344,6 +365,10 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   // Parse items if it's a string
   if (typeof items === "string") {
     items = JSON.parse(items);
+  }
+
+  if (!Array.isArray(items)) {
+    return next(new ErrorHandler("Items must be an array", 400));
   }
 
   if (!process) {
@@ -416,9 +441,8 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   const previousItems = row.items;
   row.items = items;
   process.updatedBy = req.user._id;
-  await process.save();
 
-  await handleUpdateIntersection(
+  const intersectionResponse = await handleUpdateIntersection(
     process,
     items,
     row,
@@ -427,21 +451,33 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     previousItems
   );
 
-  // Save history for main process update
-  await History.create({
-    collectionName: "Process",
-    documentId: process._id,
-    rowId: row._id,
-    operation: "update",
-    oldData,
-    newData: { items },
-    changedBy: req.user._id,
-  });
+  if (intersectionResponse && intersectionResponse.success) {
+    // Save process only if intersection succeeds
+    await process.save();
 
-  res.status(200).json({
-    success: true,
-    data: process,
-  });
+    // Save history for main process update
+    await History.create({
+      collectionName: "Process",
+      documentId: process._id,
+      rowId: row._id,
+      operation: "update",
+      oldData,
+      newData: { items },
+      changedBy: req.user._id,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: process,
+    });
+  } else {
+    return next(
+      new ErrorHandler(
+        intersectionResponse?.message || "Intersection Processing Failed",
+        intersectionResponse?.statusCode || 400
+      )
+    );
+  }
 });
 
 // DELETE row by rowId
@@ -454,8 +490,21 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
   }
 
   const currentRow = process.data.id(rowId);
+  const intersectionResponse = await handleDeleteIntersection(
+    process,
+    rowId,
+    req.user._id,
+    currentRow
+  );
 
-  await handleDeleteIntersection(process, rowId, req.user._id, currentRow);
+  if (intersectionResponse && !intersectionResponse.success) {
+    return next(
+      new ErrorHandler(
+        intersectionResponse?.message || "Intersection Delete Failed",
+        intersectionResponse?.statusCode || 400
+      )
+    );
+  }
 
   if (!currentRow) {
     return next(new ErrorHandler("Row not found", 404));

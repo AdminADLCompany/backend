@@ -6,7 +6,7 @@ const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 
 function toMinutes(t) {
-  if (!t || t === "nil") return null;
+  if (!t || t === "nil" || typeof t !== "string") return null;
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 }
@@ -44,6 +44,7 @@ const sceduledLoss = [
 ];
 
 const linkProcessIdItems = async (rowItems) => {
+  if (!rowItems || !Array.isArray(rowItems)) return rowItems;
   for (const item of rowItems) {
     if (item.process === "processId" && item.value) {
       const relatedProcess = await Process.findOne({ processId: item.value });
@@ -56,8 +57,10 @@ const linkProcessIdItems = async (rowItems) => {
   return rowItems;
 };
 
-exports.handleAddIntersection = catchAsyncErrors(
-  async (process, items, rowDataId, userId) => {
+exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
+  try {
+    if (!Array.isArray(items))
+      return { success: false, message: "Items must be an array" };
     // ---- MR/R/003B (Action Taken -> Rework) ----
     if (process.processId === "MR/R/003B") {
       const moveToItem = items.find((i) => i.key === "MOVE TO");
@@ -68,16 +71,21 @@ exports.handleAddIntersection = catchAsyncErrors(
         });
 
         if (!rejectionProcess) {
-          throw new ErrorHandler("Rejection Process (MR/R/003) not found", 404);
+          return {
+            success: false,
+            message: "Rejection Process (MR/R/003) not found",
+            statusCode: 404,
+          };
         }
 
         const rejectionRow = rejectionProcess.data.id(rowDataId);
 
         if (!rejectionRow) {
-          throw new ErrorHandler(
-            `Row with ID ${rowDataId} not found in MR/R/003`,
-            404
-          );
+          return {
+            success: false,
+            message: `Row with ID ${rowDataId} not found in MR/R/003`,
+            statusCode: 404,
+          };
         }
 
         const partNo = rejectionRow.items.find(
@@ -103,7 +111,11 @@ exports.handleAddIntersection = catchAsyncErrors(
         });
 
         if (!reworkProcess) {
-          throw new ErrorHandler("Rework Process (MR/R/003A) not found", 404);
+          return {
+            success: false,
+            message: "Rework Process (MR/R/003A) not found",
+            statusCode: 404,
+          };
         }
 
         let reworkRow = {
@@ -159,20 +171,32 @@ exports.handleAddIntersection = catchAsyncErrors(
       });
 
       if (!inspectionProcess)
-        throw new ErrorHandler("Inspection Process (QA/R/003) not found", 404);
+        return {
+          success: false,
+          message: "Inspection Process (QA/R/003) not found",
+          statusCode: 404,
+        };
       if (!procurementProcess)
-        throw new ErrorHandler("Procurement Process (PR/R/003) not found", 404);
+        return {
+          success: false,
+          message: "Procurement Process (PR/R/003) not found",
+          statusCode: 404,
+        };
 
       const procurementRow = procurementProcess.data.find(
         (row) => row._id.toString() === rowDataId
       );
       if (!procurementRow)
-        throw new ErrorHandler("Procurement row not found", 404);
+        return {
+          success: false,
+          message: "Procurement row not found",
+          statusCode: 404,
+        };
 
       const isMoving = items.find(
         (i) => i.key === "QC QUALITY INSPECTION"
       )?.value;
-      if (isMoving !== "Move to Inspection") return;
+      if (isMoving !== "Move to Inspection") return { success: true };
 
       const inspectionRow = {
         items: [
@@ -265,16 +289,26 @@ exports.handleAddIntersection = catchAsyncErrors(
       const Products = await Process.findOne({ processId: "DD/R/002A" });
 
       if (!procurementRegisterProcess)
-        throw new ErrorHandler(
-          "Procurement Register (PR/R/003) not found",
-          404
-        );
-      if (!BOM) throw new ErrorHandler("BOM (DD/R/002) not found", 404);
+        return {
+          success: false,
+          message: "Procurement Register (PR/R/003) not found",
+          statusCode: 404,
+        };
+      if (!BOM)
+        return {
+          success: false,
+          message: "BOM (DD/R/002) not found",
+          statusCode: 404,
+        };
       if (!Products)
-        throw new ErrorHandler("Products (DD/R/002A) not found", 404);
+        return {
+          success: false,
+          message: "Products (DD/R/002A) not found",
+          statusCode: 404,
+        };
 
       const MoveItem = items.find((i) => i.key === "RM")?.value;
-      if (MoveItem !== "Planning") return;
+      if (MoveItem !== "Planning") return { success: true };
 
       const planNo = items.find((i) => i.key === "PLAN NO")?.value;
       const date = items.find((i) => i.key === "DATE")?.value;
@@ -368,7 +402,11 @@ exports.handleAddIntersection = catchAsyncErrors(
     else if (process.processId === "PR/R/002") {
       const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
       if (!stockDataProcess)
-        throw new ErrorHandler("Stock Data Process (ST/R/006) not found", 404);
+        return {
+          success: false,
+          message: "Stock Data Process (ST/R/006) not found",
+          statusCode: 404,
+        };
 
       const itemName = items.find((i) => i.key === "ITEM NAME")?.value;
       const itemCode = items.find((i) => i.key === "ITEM CODE")?.value;
@@ -400,10 +438,12 @@ exports.handleAddIntersection = catchAsyncErrors(
       const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
 
       if (!storeRegisterProcess || !itemListProcess)
-        throw new ErrorHandler(
-          "Store Register Process (ST/R/005) or Item List Process (PR/R/002) not found",
-          404
-        );
+        return {
+          success: false,
+          message:
+            "Store Register Process (ST/R/005) or Item List Process (PR/R/002) not found",
+          statusCode: 404,
+        };
 
       const inputCode = items.find((i) => i.key === "ITEM CODE")?.value;
 
@@ -415,10 +455,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       });
 
       if (!matchedRow)
-        throw new ErrorHandler(
-          "Item not found in Item List Process (PR/R/002)",
-          404
-        );
+        return {
+          success: false,
+          message: "Item not found in Item List Process (PR/R/002)",
+          statusCode: 404,
+        };
 
       const itemName = matchedRow.items.find(
         (i) => i.key === "ITEM NAME"
@@ -462,16 +503,16 @@ exports.handleAddIntersection = catchAsyncErrors(
 
       storeRegisterProcess.data.push(storeRegisterRow);
       storeRegisterProcess.updatedBy = userId;
-      await storeRegisterProcess.save();
 
       if (stockDataProcess) {
         const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
         if (!itemCode)
-          throw new ErrorHandler(
-            "Item Code not found in Item List Process (PR/R/002)",
-            404
-          );
+          return {
+            success: false,
+            message: "Item Code not found in Item List Process (PR/R/002)",
+            statusCode: 404,
+          };
 
         // Find if stock entry for this item already exists
         const existingStockRow = stockDataProcess.data.find(
@@ -497,7 +538,6 @@ exports.handleAddIntersection = catchAsyncErrors(
           if (stockItem) stockItem.value = newStock.toString();
 
           stockDataProcess.updatedBy = userId;
-          await stockDataProcess.save();
         } else {
           // Create new stock entry
           const newStockRow = {
@@ -514,9 +554,12 @@ exports.handleAddIntersection = catchAsyncErrors(
 
           stockDataProcess.data.push(newStockRow);
           stockDataProcess.updatedBy = userId;
-          await stockDataProcess.save();
         }
       }
+
+      // Save both processes only if all logic succeeds
+      await storeRegisterProcess.save();
+      if (stockDataProcess) await stockDataProcess.save();
     }
 
     // ---- MS/R/006 → ST/R/005 ---- Order List -> Store Register ----
@@ -534,10 +577,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       });
 
       if (!matchedRow || !storeRegisterProcess)
-        throw new ErrorHandler(
-          "Item not found in Store Register Process (ST/R/005)",
-          404
-        );
+        return {
+          success: false,
+          message: "Item not found in Store Register Process (ST/R/005)",
+          statusCode: 404,
+        };
 
       const storeRegisterRow = {
         items: [
@@ -589,14 +633,18 @@ exports.handleAddIntersection = catchAsyncErrors(
 
       storeRegisterProcess.data.push(storeRegisterRow);
       storeRegisterProcess.updatedBy = userId;
-      await storeRegisterProcess.save();
 
       if (stockDataProcess) {
         // 🧩 Use PART NO as the item code reference
         const itemCode = items.find((i) => i.key === "PART NO")?.value;
         const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-        if (!itemCode) throw new ErrorHandler("Item code not found", 404);
+        if (!itemCode)
+          return {
+            success: false,
+            message: "Item code not found",
+            statusCode: 404,
+          };
 
         // 🔍 Find existing stock entry for this item
         const existingStockRow = stockDataProcess.data.find(
@@ -622,7 +670,6 @@ exports.handleAddIntersection = catchAsyncErrors(
           if (stockItem) stockItem.value = newStock.toString();
 
           stockDataProcess.updatedBy = userId;
-          await stockDataProcess.save();
         } else {
           // 🆕 Create new stock entry (first-time OUT)
           const itemCategory =
@@ -646,9 +693,12 @@ exports.handleAddIntersection = catchAsyncErrors(
 
           stockDataProcess.data.push(newStockRow);
           stockDataProcess.updatedBy = userId;
-          await stockDataProcess.save();
         }
       }
+
+      // Save both processes only if check passes
+      await storeRegisterProcess.save();
+      if (stockDataProcess) await stockDataProcess.save();
     }
 
     // ---- MR/R/002A -> MR/R/002 (OEE Calculation) ----
@@ -660,10 +710,11 @@ exports.handleAddIntersection = catchAsyncErrors(
         processId: "MR/R/002",
       });
       if (!breakHourProcess || !productionReportProcess)
-        throw new ErrorHandler(
-          "No production report or Break Process Found",
-          404
-        );
+        return {
+          success: false,
+          message: "No production report or Break Process Found",
+          statusCode: 404,
+        };
 
       // find the matchrow of the production report by _id of the each data row with rowDataId we have now 69197d26a7e0a3fff476f0b2
       const productionReportRow = productionReportProcess.data.find(
@@ -672,7 +723,11 @@ exports.handleAddIntersection = catchAsyncErrors(
 
       // if (!productionReportRow) throw new Error("No production report row found");
       if (!productionReportRow)
-        throw new ErrorHandler("No production report row found", 404);
+        return {
+          success: false,
+          message: "No production report row found",
+          statusCode: 404,
+        };
 
       const start = toMinutes(
         productionReportRow.items.find((i) => i.key === "START TIME")?.value
@@ -721,7 +776,12 @@ exports.handleAddIntersection = catchAsyncErrors(
           totalTime) *
         100;
 
-      if (!planItem) throw new ErrorHandler("PLAN field not found", 404);
+      if (!planItem)
+        return {
+          success: false,
+          message: "PLAN field not found",
+          statusCode: 404,
+        };
       breakHour.process = valueOfProcess.toString();
       planItem.value = actualPlan.toString();
       oeeItem.value = Math.floor(oeeCalculation).toString();
@@ -815,7 +875,11 @@ exports.handleAddIntersection = catchAsyncErrors(
       const isMoving = items.find((i) => i.key === "QL STATUS")?.value;
 
       if (!orderListProcess)
-        throw new ErrorHandler("No order list process found", 404);
+        return {
+          success: false,
+          message: "No order list process found",
+          statusCode: 404,
+        };
 
       if (isMoving === "ORDER") {
         let orderListRow = {
@@ -895,6 +959,11 @@ exports.handleAddIntersection = catchAsyncErrors(
               value: "MS/R/006A",
               process: "processId",
             },
+            {
+              key: "ORDER STATUS",
+              value: "",
+              process: "select",
+            },
           ],
           rowDataId: row.rowDataId,
         };
@@ -905,19 +974,33 @@ exports.handleAddIntersection = catchAsyncErrors(
         orderListProcess.updatedBy = userId;
         await orderListProcess.save();
       }
-    }
-
-    //
-    else if (process.processId === "DD/R/012") {
+    } else if (process.processId === "DD/R/012") {
       const NPDRegisterProcess = await Process.findOne({
         processId: "DD/R/010",
       });
     }
-  }
-);
 
-exports.handleUpdateIntersection = catchAsyncErrors(
-  async (process, items, row, userId, rowId, previousItems) => {
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      statusCode: error.statusCode || 500,
+    };
+  }
+};
+
+exports.handleUpdateIntersection = async (
+  process,
+  items,
+  row,
+  userId,
+  rowId,
+  previousItems
+) => {
+  try {
+    if (!Array.isArray(items))
+      return { success: false, message: "Items must be an array" };
     // ---- MR/R/003B (Rework) ----
     if (process.processId === "MR/R/003B") {
       const moveToItem = items.find((i) => i.key === "MOVE TO");
@@ -1090,15 +1173,18 @@ exports.handleUpdateIntersection = catchAsyncErrors(
                 value: "MS/R/006A",
                 process: "processId",
               },
+              {
+                key: "ORDER STATUS",
+                value: "",
+                process: "select",
+              },
             ],
             rowDataId: rowId,
           };
 
           orderListRow.items = await linkProcessIdItems(orderListRow.items);
-
           orderListProcess.data.push(orderListRow);
           orderListProcess.updatedBy = userId;
-          await orderListProcess.save();
         }
 
         const matchedRow = storeRegisterProcess.data.find((itemRow) => {
@@ -1109,10 +1195,11 @@ exports.handleUpdateIntersection = catchAsyncErrors(
         });
 
         if (!matchedRow || !storeRegisterProcess)
-          throw new ErrorHandler(
-            "Item not found in Store Register Process (ST/R/005)",
-            404
-          );
+          return {
+            success: false,
+            message: "Item not found in Store Register Process (ST/R/005)",
+            statusCode: 404,
+          };
 
         const storeRegisterRow = {
           items: [
@@ -1164,14 +1251,18 @@ exports.handleUpdateIntersection = catchAsyncErrors(
 
         storeRegisterProcess.data.push(storeRegisterRow);
         storeRegisterProcess.updatedBy = userId;
-        await storeRegisterProcess.save();
 
         if (stockDataProcess) {
           // 🧩 Use PART NO as the item code reference
           const itemCode = items.find((i) => i.key === "PART NO")?.value;
           const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-          if (!itemCode) throw new ErrorHandler("Item code not found", 404);
+          if (!itemCode)
+            return {
+              success: false,
+              message: "Item code not found",
+              statusCode: 404,
+            };
 
           // 🔍 Find existing stock entry for this item
           const existingStockRow = stockDataProcess.data.find(
@@ -1198,7 +1289,6 @@ exports.handleUpdateIntersection = catchAsyncErrors(
             if (stockItem) stockItem.value = newStock.toString();
 
             stockDataProcess.updatedBy = userId;
-            await stockDataProcess.save();
           } else {
             // 🆕 Create new stock entry (first-time OUT)
             const itemCategory =
@@ -1222,9 +1312,13 @@ exports.handleUpdateIntersection = catchAsyncErrors(
 
             stockDataProcess.data.push(newStockRow);
             stockDataProcess.updatedBy = userId;
-            await stockDataProcess.save();
           }
         }
+
+        // SAVE ALL ONLY AT THE END
+        if (orderListProcess) await orderListProcess.save();
+        await storeRegisterProcess.save();
+        if (stockDataProcess) await stockDataProcess.save();
       }
     }
 
@@ -1283,11 +1377,11 @@ exports.handleUpdateIntersection = catchAsyncErrors(
       const procurementProcess = await Process.findOne({
         processId: "PR/R/003",
       });
-      if (!procurementProcess) return;
+      if (!procurementProcess) return { success: true };
 
       // 2️⃣ Filter inward rows linked to the current rowDataId
       const matchRows = process.data.filter((r) => r.rowDataId === rowDataId);
-      if (matchRows.length === 0) return;
+      if (matchRows.length === 0) return { success: true };
 
       // 3️⃣ Check if ALL related inward rows have QC QUALITY INSPECTION = "Inspection Done"
       const allInspectionDone = matchRows.every(
@@ -1322,19 +1416,19 @@ exports.handleUpdateIntersection = catchAsyncErrors(
       });
       const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
 
-      if (!inwardProcess) return;
+      if (!inwardProcess) return { success: true };
       const isMoving = items.find((i) => i.key === "INSPECTION-STATUS")?.value;
 
       if (isMoving === "Done") {
         const qualityInspectionProcess = await Process.findOne({
           processId: "QA/R/003A",
         });
-        if (!qualityInspectionProcess) return;
+        if (!qualityInspectionProcess) return { success: true };
 
         const matchQulaityInspection = qualityInspectionProcess.data.find(
           (r) => r.rowDataId === row._id.toString()
         );
-        if (!matchQulaityInspection) return;
+        if (!matchQulaityInspection) return { success: true };
 
         let currentInwardRow = inwardProcess.data.find(
           (r) => r.rowDataId === row.rowDataId.toString()
@@ -1401,7 +1495,6 @@ exports.handleUpdateIntersection = catchAsyncErrors(
         };
         inwardProcess.data.id(currentInwardRow._id).items = inwardRow.items;
         inwardProcess.updatedBy = userId;
-        await inwardProcess.save();
 
         // Update Store Register
         if (storeRegisterProcess) {
@@ -1460,14 +1553,13 @@ exports.handleUpdateIntersection = catchAsyncErrors(
 
           storeRegisterProcess.data.push(storeRegisterRow);
           storeRegisterProcess.updatedBy = userId;
-          await storeRegisterProcess.save();
         }
 
         if (stockDataProcess) {
           const itemCode = items.find((i) => i.key === "ITEM CODE")?.value;
           const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
-          if (!itemCode) return;
+          if (!itemCode) return { success: true };
 
           // Find if stock entry for this item already exists
           const existingStockRow = stockDataProcess.data.find(
@@ -1494,7 +1586,6 @@ exports.handleUpdateIntersection = catchAsyncErrors(
             if (stockItem) stockItem.value = newStock.toString();
 
             stockDataProcess.updatedBy = userId;
-            await stockDataProcess.save();
           } else {
             // 🔵 Create new stock entry for this item
             const itemCategory =
@@ -1516,9 +1607,12 @@ exports.handleUpdateIntersection = catchAsyncErrors(
 
             stockDataProcess.data.push(newStockRow);
             stockDataProcess.updatedBy = userId;
-            await stockDataProcess.save();
           }
         }
+
+        await inwardProcess.save();
+        if (storeRegisterProcess) await storeRegisterProcess.save();
+        if (stockDataProcess) await stockDataProcess.save();
       }
     }
 
@@ -1529,18 +1623,31 @@ exports.handleUpdateIntersection = catchAsyncErrors(
       });
 
       if (!NPDRegisterProcess)
-        throw new ErrorHandler("NPD Register Process not found", 404);
+        return {
+          success: false,
+          message: "NPD Register Process not found",
+          statusCode: 404,
+        };
 
       const correspondingItem = NPDRegisterProcess.data.find(
         (d) => d._id.toString() === row.rowDataId.toString()
       );
 
       if (!correspondingItem)
-        throw new ErrorHandler("Corresponding NPD row not found", 404);
+        return {
+          success: false,
+          message: "Corresponding NPD row not found",
+          statusCode: 404,
+        };
 
       const protoItem = correspondingItem.items.find((i) => i.key === "PROTO");
 
-      if (!protoItem) throw new ErrorHandler("PROTO item not found", 404);
+      if (!protoItem)
+        return {
+          success: false,
+          message: "PROTO item not found",
+          statusCode: 404,
+        };
 
       const hasPending = items.some((i) => i.value === "Pending");
       const hasInProgress = items.some((i) => i.value === "In Progress");
@@ -1566,11 +1673,24 @@ exports.handleUpdateIntersection = catchAsyncErrors(
     //
     else if (process.processId === "MR/R/002A") {
     }
-  }
-);
 
-exports.handleDeleteIntersection = catchAsyncErrors(
-  async (process, rowId, userId, currentRow) => {
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      statusCode: error.statusCode || 500,
+    };
+  }
+};
+
+exports.handleDeleteIntersection = async (
+  process,
+  rowId,
+  userId,
+  currentRow
+) => {
+  try {
     // Utility function to delete linked rows safely
     const deleteLinkedRows = async (targetProcessId, filterFn) => {
       const target = await Process.findOne({ processId: targetProcessId });
@@ -1649,5 +1769,12 @@ exports.handleDeleteIntersection = catchAsyncErrors(
     else if (process.processId === "PR/R/003") {
       await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
     }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      statusCode: error.statusCode || 500,
+    };
   }
-);
+};
