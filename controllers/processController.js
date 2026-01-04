@@ -253,6 +253,8 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
       const reject = Number(items.find((i) => i.key === "REJECT")?.value);
       const oeeItem = items.find((i) => i.key === "OEE");
+      const settingColor = items.find((i) => i.key === "SETTING");
+      settingColor.process = "red";
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
       const totalTime = end - start;

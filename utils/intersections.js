@@ -735,6 +735,11 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const endRaw = toMinutes(
         productionReportRow.items.find((i) => i.key === "END TIME")?.value
       );
+      const settingColor = productionReportRow.items.find(
+        (i) => i.key === "SETTING"
+      );
+      settingColor.process = "green";
+
       const end = endRaw < start ? endRaw + 1440 : endRaw;
 
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
@@ -1641,6 +1646,12 @@ exports.handleUpdateIntersection = async (
         };
 
       const protoItem = correspondingItem.items.find((i) => i.key === "PROTO");
+      const validationItem = correspondingItem.items.find(
+        (i) => i.key === "VALIDATION"
+      );
+      const masterPieceItem = correspondingItem.items.find(
+        (i) => i.key === "MASTER"
+      );
 
       if (!protoItem)
         return {
@@ -1653,6 +1664,33 @@ exports.handleUpdateIntersection = async (
       const hasInProgress = items.some((i) => i.value === "In Progress");
       const allCompleted =
         items.length > 0 && items.every((i) => i.value === "Completed");
+
+      const validationColor = items.find((i) => i.key === "VALIDATION");
+      const masterColor = items.find((i) => i.key === "MASTER PIECE");
+
+      if (validationItem) {
+        if (validationColor.value === "Pending") {
+          validationItem.process = "red";
+        } else if (validationColor.value === "In Progress") {
+          validationItem.process = "orange";
+        } else if (validationColor.value === "Completed") {
+          validationItem.process = "green";
+        } else {
+          validationItem.process = "red"; // fallback safety
+        }
+      }
+
+      if (masterPieceItem) {
+        if (masterColor.value === "Pending") {
+          masterPieceItem.process = "red";
+        } else if (masterColor.value === "In Progress") {
+          masterPieceItem.process = "orange";
+        } else if (masterColor.value === "Completed") {
+          masterPieceItem.process = "green";
+        } else {
+          masterPieceItem.process = "red"; // fallback safety
+        }
+      }
 
       if (hasPending) {
         protoItem.process = "red";
