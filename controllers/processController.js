@@ -16,7 +16,7 @@ const ImageUploadArray = [
   "UPLOAD",
   "BEFORE",
   "AFTER",
-  "CALIBRATION CERTIFICATE NO / DATE",
+  "CERTIFICATE",
   "ACTION REPORT",
   "NPD FORM",
   "EVALUATE",
