@@ -965,26 +965,6 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               process: "processId",
             },
             {
-              key: "INVOICE NO",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "DELIVERY QTY",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "PENDING QTY",
-              value: "",
-              process: "value",
-            },
-            {
-              key: "DELIVERY DATE",
-              value: "",
-              process: "date",
-            },
-            {
               key: "ORDER STATUS",
               value: "",
               process: "select",
@@ -1197,26 +1177,6 @@ exports.handleUpdateIntersection = async (
                 key: "DOCKET",
                 value: "MS/R/006A",
                 process: "processId",
-              },
-              {
-                key: "INVOICE NO",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "DELIVERY QTY",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "PENDING QTY",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "DELIVERY DATE",
-                value: "",
-                process: "date",
               },
               {
                 key: "ORDER STATUS",
