@@ -89,16 +89,16 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         }
 
         const partNo = rejectionRow.items.find(
-          (i) => i.key === "PART NO"
+          (i) => i.key === "PART NO",
         )?.value;
         const partName = rejectionRow.items.find(
-          (i) => i.key === "PART NAME"
+          (i) => i.key === "PART NAME",
         )?.value;
         const problemDesc = rejectionRow.items.find(
-          (i) => i.key === "PROBLEM DESCRIPTION"
+          (i) => i.key === "PROBLEM DESCRIPTION",
         )?.value;
         const rejectStage = rejectionRow.items.find(
-          (i) => i.key === "REJECT STAGE"
+          (i) => i.key === "REJECT STAGE",
         )?.value;
         const rejectQty =
           rejectionRow.items.find((i) => i.key === "REJECT QTY")?.value || 0;
@@ -194,7 +194,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         };
 
       const isMoving = items.find(
-        (i) => i.key === "QC QUALITY INSPECTION"
+        (i) => i.key === "QC QUALITY INSPECTION",
       )?.value;
       if (isMoving !== "Move to Inspection") return { success: true };
 
@@ -317,15 +317,15 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const type = items.find((i) => i.key === "TYPE")?.value;
       const material = items.find((i) => i.key === "MATERIAL")?.value;
       const planQty = parseFloat(
-        items.find((i) => i.key === "PLAN QTY")?.value || 0
+        items.find((i) => i.key === "PLAN QTY")?.value || 0,
       );
 
       const bomDict = Object.fromEntries(
-        BOM.data.map((b) => [b._id.toString(), b])
+        BOM.data.map((b) => [b._id.toString(), b]),
       );
       const matchingProducts = Products.data.filter((productRow) => {
         const p = Object.fromEntries(
-          productRow.items.map((i) => [i.key, i.value])
+          productRow.items.map((i) => [i.key, i.value]),
         );
         return (
           p["PART NO"] === partNo &&
@@ -344,7 +344,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           if (!bomRow) continue;
 
           const b = Object.fromEntries(
-            bomRow.items.map((i) => [i.key, i.value])
+            bomRow.items.map((i) => [i.key, i.value]),
           );
           const totalQty = parseFloat(b["QTY"] || 0) * planQty;
 
@@ -386,7 +386,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           };
 
           procurementRegisterRow.items = await linkProcessIdItems(
-            procurementRegisterRow.items
+            procurementRegisterRow.items,
           );
           procurementRegisterProcess.data.push(procurementRegisterRow);
         }
@@ -449,7 +449,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
       const matchedRow = itemListProcess.data.find((itemRow) => {
         const rowItemCode = itemRow.items.find(
-          (i) => i.key === "ITEM CODE"
+          (i) => i.key === "ITEM CODE",
         )?.value;
         return rowItemCode === inputCode;
       });
@@ -462,13 +462,13 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         };
 
       const itemName = matchedRow.items.find(
-        (i) => i.key === "ITEM NAME"
+        (i) => i.key === "ITEM NAME",
       )?.value;
       const itemCode = matchedRow.items.find(
-        (i) => i.key === "ITEM CODE"
+        (i) => i.key === "ITEM CODE",
       )?.value;
       const itemCategory = matchedRow.items.find(
-        (i) => i.key === "ITEM CATEGORY"
+        (i) => i.key === "ITEM CATEGORY",
       )?.value;
 
       const storeRegisterRow = {
@@ -516,7 +516,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
         // Find if stock entry for this item already exists
         const existingStockRow = stockDataProcess.data.find(
-          (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
+          (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
         );
 
         if (existingStockRow) {
@@ -524,7 +524,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           const inItem = existingStockRow.items.find((i) => i.key === "IN");
           const outItem = existingStockRow.items.find((i) => i.key === "OUT");
           const stockItem = existingStockRow.items.find(
-            (i) => i.key === "STOCK"
+            (i) => i.key === "STOCK",
           );
 
           const currentIn = Number(inItem?.value || 0);
@@ -571,7 +571,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
       const matchedRow = storeRegisterProcess.data.find((itemRow) => {
         const rowItemCode = itemRow.items.find(
-          (i) => i.key === "ITEM CODE"
+          (i) => i.key === "ITEM CODE",
         )?.value;
         return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
       });
@@ -648,7 +648,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
         // 🔍 Find existing stock entry for this item
         const existingStockRow = stockDataProcess.data.find(
-          (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
+          (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
         );
 
         if (existingStockRow) {
@@ -656,7 +656,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           const inItem = existingStockRow.items.find((i) => i.key === "IN");
           const outItem = existingStockRow.items.find((i) => i.key === "OUT");
           const stockItem = existingStockRow.items.find(
-            (i) => i.key === "STOCK"
+            (i) => i.key === "STOCK",
           );
 
           const currentIn = Number(inItem?.value || 0);
@@ -718,7 +718,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
       // find the matchrow of the production report by _id of the each data row with rowDataId we have now 69197d26a7e0a3fff476f0b2
       const productionReportRow = productionReportProcess.data.find(
-        (row) => row._id.toString() === rowDataId.toString()
+        (row) => row._id.toString() === rowDataId.toString(),
       );
 
       // if (!productionReportRow) throw new Error("No production report row found");
@@ -730,13 +730,13 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         };
 
       const start = toMinutes(
-        productionReportRow.items.find((i) => i.key === "START TIME")?.value
+        productionReportRow.items.find((i) => i.key === "START TIME")?.value,
       );
       const endRaw = toMinutes(
-        productionReportRow.items.find((i) => i.key === "END TIME")?.value
+        productionReportRow.items.find((i) => i.key === "END TIME")?.value,
       );
       const settingColor = productionReportRow.items.find(
-        (i) => i.key === "SETTING"
+        (i) => i.key === "SETTING",
       );
       settingColor.process = "green";
 
@@ -748,27 +748,27 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const totalTime =
         Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
         Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
 
       const actualPlan =
         (totalTime - (settings || 0)) /
         Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
 
       const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
       const actualItem = productionReportRow.items.find(
-        (i) => i.key === "ACTUAL"
+        (i) => i.key === "ACTUAL",
       )?.value;
       const cycleTime = productionReportRow.items.find(
-        (i) => i.key === "CYCLE TIME"
+        (i) => i.key === "CYCLE TIME",
       )?.value;
       const reject = Number(
-        productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0
+        productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0,
       );
       const breakHour = productionReportRow.items.find(
-        (i) => i.key === "BREAK HOUR"
+        (i) => i.key === "BREAK HOUR",
       );
       const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
 
@@ -1001,7 +1001,7 @@ exports.handleUpdateIntersection = async (
   row,
   userId,
   rowId,
-  previousItems
+  previousItems,
 ) => {
   try {
     if (!Array.isArray(items))
@@ -1019,16 +1019,16 @@ exports.handleUpdateIntersection = async (
           const rejectionRow = rejectionReport.data.id(row.rowDataId);
           if (rejectionRow) {
             const partNo = rejectionRow.items.find(
-              (i) => i.key === "PART NO"
+              (i) => i.key === "PART NO",
             )?.value;
             const partName = rejectionRow.items.find(
-              (i) => i.key === "PART NAME"
+              (i) => i.key === "PART NAME",
             )?.value;
             const problemDesc = rejectionRow.items.find(
-              (i) => i.key === "PROBLEM DESCRIPTION"
+              (i) => i.key === "PROBLEM DESCRIPTION",
             )?.value;
             const rejectStage = rejectionRow.items.find(
-              (i) => i.key === "REJECT STAGE"
+              (i) => i.key === "REJECT STAGE",
             )?.value;
 
             const reworkRow = {
@@ -1194,7 +1194,7 @@ exports.handleUpdateIntersection = async (
 
         const matchedRow = storeRegisterProcess.data.find((itemRow) => {
           const rowItemCode = itemRow.items.find(
-            (i) => i.key === "ITEM CODE"
+            (i) => i.key === "ITEM CODE",
           )?.value;
           return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
         });
@@ -1272,7 +1272,7 @@ exports.handleUpdateIntersection = async (
           // 🔍 Find existing stock entry for this item
           const existingStockRow = stockDataProcess.data.find(
             (r) =>
-              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
+              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
           );
 
           if (existingStockRow) {
@@ -1280,7 +1280,7 @@ exports.handleUpdateIntersection = async (
             const inItem = existingStockRow.items.find((i) => i.key === "IN");
             const outItem = existingStockRow.items.find((i) => i.key === "OUT");
             const stockItem = existingStockRow.items.find(
-              (i) => i.key === "STOCK"
+              (i) => i.key === "STOCK",
             );
 
             const currentIn = Number(inItem?.value || 0);
@@ -1340,7 +1340,7 @@ exports.handleUpdateIntersection = async (
       const material = items.find((i) => i.key === "MATERIAL")?.value;
       const planQty = Number(items.find((i) => i.key === "PLAN QTY")?.value);
       const previousPlanQty = Number(
-        previousItems.find((i) => i.key === "PLAN QTY")?.value
+        previousItems.find((i) => i.key === "PLAN QTY")?.value,
       );
 
       if (procurementProcess && planNumber) {
@@ -1349,7 +1349,7 @@ exports.handleUpdateIntersection = async (
           if (plNo !== planNumber) continue;
 
           const prQuantity = Number(
-            prRow.items.find((i) => i.key === "QTY")?.value || 0
+            prRow.items.find((i) => i.key === "QTY")?.value || 0,
           );
           const bomQuantity = previousPlanQty
             ? Number(prQuantity / previousPlanQty)
@@ -1392,7 +1392,7 @@ exports.handleUpdateIntersection = async (
       const allInspectionDone = matchRows.every(
         (row) =>
           row.items.find((i) => i.key === "QC QUALITY INSPECTION")?.value ===
-          "Inspection Done"
+          "Inspection Done",
       );
 
       // 4️⃣ If inspection done, find the corresponding procurement row and update status
@@ -1400,7 +1400,7 @@ exports.handleUpdateIntersection = async (
         const inwardRow = matchRows[0];
 
         const prRow = procurementProcess.data.find(
-          (r) => r._id.toString() === inwardRow.rowDataId.toString()
+          (r) => r._id.toString() === inwardRow.rowDataId.toString(),
         );
 
         if (prRow) {
@@ -1431,12 +1431,12 @@ exports.handleUpdateIntersection = async (
         if (!qualityInspectionProcess) return { success: true };
 
         const matchQulaityInspection = qualityInspectionProcess.data.find(
-          (r) => r.rowDataId === row._id.toString()
+          (r) => r.rowDataId === row._id.toString(),
         );
         if (!matchQulaityInspection) return { success: true };
 
         let currentInwardRow = inwardProcess.data.find(
-          (r) => r.rowDataId === row.rowDataId.toString()
+          (r) => r.rowDataId === row.rowDataId.toString(),
         );
 
         const inwardRow = {
@@ -1470,7 +1470,7 @@ exports.handleUpdateIntersection = async (
             {
               key: "DEFECT QTY",
               value: matchQulaityInspection.items.find(
-                (i) => i.key === "DEFECT QUANTITY"
+                (i) => i.key === "DEFECT QUANTITY",
               )?.value,
               process: "value",
             },
@@ -1478,12 +1478,12 @@ exports.handleUpdateIntersection = async (
               key: "PENDING QTY",
               value: (
                 Number(
-                  currentInwardRow?.items.find((i) => i.key === "QTY")?.value
+                  currentInwardRow?.items.find((i) => i.key === "QTY")?.value,
                 ) -
                 Number(
                   matchQulaityInspection.items.find(
-                    (i) => i.key === "DEFECT QUANTITY"
-                  )?.value
+                    (i) => i.key === "DEFECT QUANTITY",
+                  )?.value,
                 )
               ).toString(),
               process: "value",
@@ -1539,8 +1539,8 @@ exports.handleUpdateIntersection = async (
                     Number(items.find((i) => i.key === "QTY")?.value) -
                     Number(
                       matchQulaityInspection.items.find(
-                        (i) => i.key === "DEFECT QUANTITY"
-                      )?.value || 0
+                        (i) => i.key === "DEFECT QUANTITY",
+                      )?.value || 0,
                     )
                   ).toString() || 0,
                 process: "value",
@@ -1569,7 +1569,7 @@ exports.handleUpdateIntersection = async (
           // Find if stock entry for this item already exists
           const existingStockRow = stockDataProcess.data.find(
             (r) =>
-              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
+              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
           );
 
           if (existingStockRow) {
@@ -1577,7 +1577,7 @@ exports.handleUpdateIntersection = async (
             const inItem = existingStockRow.items.find((i) => i.key === "IN");
             const outItem = existingStockRow.items.find((i) => i.key === "OUT");
             const stockItem = existingStockRow.items.find(
-              (i) => i.key === "STOCK"
+              (i) => i.key === "STOCK",
             );
 
             const currentIn = Number(inItem?.value || 0);
@@ -1635,7 +1635,7 @@ exports.handleUpdateIntersection = async (
         };
 
       const correspondingItem = NPDRegisterProcess.data.find(
-        (d) => d._id.toString() === row.rowDataId.toString()
+        (d) => d._id.toString() === row.rowDataId.toString(),
       );
 
       if (!correspondingItem)
@@ -1647,10 +1647,10 @@ exports.handleUpdateIntersection = async (
 
       const protoItem = correspondingItem.items.find((i) => i.key === "PROTO");
       const validationItem = correspondingItem.items.find(
-        (i) => i.key === "VALIDATION"
+        (i) => i.key === "VALIDATION",
       );
       const masterPieceItem = correspondingItem.items.find(
-        (i) => i.key === "MASTER"
+        (i) => i.key === "MASTER",
       );
 
       if (!protoItem)
@@ -1710,6 +1710,192 @@ exports.handleUpdateIntersection = async (
 
     //
     else if (process.processId === "MR/R/002A") {
+      const rowDataId = row.rowDataId;
+      const breakHourProcess = await Process.findOne({
+        processId: "MR/R/002B",
+      });
+      const productionReportProcess = await Process.findOne({
+        processId: "MR/R/002",
+      });
+      if (!breakHourProcess || !productionReportProcess)
+        return {
+          success: false,
+          message: "No production report or Break Process Found",
+          statusCode: 404,
+        };
+      const productionReportRow = productionReportProcess.data.find(
+        (row) => row._id.toString() === rowDataId.toString(),
+      );
+      if (!productionReportRow)
+        return {
+          success: false,
+          message: "No production report row found",
+          statusCode: 404,
+        };
+
+      const start = toMinutes(
+        productionReportRow.items.find((i) => i.key === "START TIME")?.value,
+      );
+      const endRaw = toMinutes(
+        productionReportRow.items.find((i) => i.key === "END TIME")?.value,
+      );
+
+      const settingColor = productionReportRow.items.find(
+        (i) => i.key === "SETTING",
+      );
+      if (settingColor) settingColor.process = "green";
+
+      const end = endRaw < start ? endRaw + 1440 : endRaw;
+
+      const settings = items.find((i) => i.key === "SETTING TIME")?.value;
+      const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
+
+      const totalTime =
+        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
+        Number(
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
+        );
+
+      const actualPlan =
+        (totalTime - (settings || 0)) /
+        Number(
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
+        );
+
+      const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
+      const actualItem = productionReportRow.items.find(
+        (i) => i.key === "ACTUAL",
+      )?.value;
+      const cycleTime = productionReportRow.items.find(
+        (i) => i.key === "CYCLE TIME",
+      )?.value;
+      const reject = Number(
+        productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0,
+      );
+      const breakHour = productionReportRow.items.find(
+        (i) => i.key === "BREAK HOUR",
+      );
+      const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
+
+      let valueOfProcess =
+        (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
+      let oeeCalculation =
+        (((Number(actualItem) / Number(actualPlan)) *
+          ((Number(actualItem) - reject) / Number(actualItem)) *
+          (totalTime - valueOfProcess)) /
+          totalTime) *
+        100;
+
+      if (!planItem)
+        return {
+          success: false,
+          message: "PLAN field not found",
+          statusCode: 404,
+        };
+      if (breakHour) breakHour.process = valueOfProcess.toString();
+      planItem.value = actualPlan.toString();
+      if (oeeItem) oeeItem.value = Math.floor(oeeCalculation).toString();
+
+      productionReportProcess.markModified("data");
+      productionReportProcess.updatedBy = userId;
+
+      await productionReportProcess.save();
+
+      // ---- BREAK VALUES ----
+      const breakValues = {};
+      sceduledLoss.forEach((b) => {
+        if (b.from === "nil" || b.to === "nil") return;
+
+        let bStart = toMinutes(b.from);
+        let bEnd = toMinutes(b.to);
+        if (bEnd < bStart) bEnd += 1440;
+
+        if (bStart < end && bEnd > start) {
+          const key = b.label.toUpperCase();
+          breakValues[key] = (breakValues[key] || 0) + b.time;
+        }
+      });
+
+      // ---- FINAL ROW ----
+      const asVal = (k) => breakValues[k] || 0;
+
+      const breakHourRow = breakHourProcess.data.find(
+        (r) => r.rowDataId && r.rowDataId.toString() === rowDataId.toString(),
+      );
+
+      if (breakHourRow) {
+        const updateItem = (key, val) => {
+          const item = breakHourRow.items.find((i) => i.key === key);
+          if (item) item.value = val;
+        };
+
+        updateItem("DRM", asVal("DRM").toString());
+        updateItem("TEA BREAK", asVal("TEA").toString());
+        updateItem("FOOD", asVal("FOOD").toString());
+        updateItem("INSPECTION", asVal("INSPECTION").toString());
+        updateItem("PRAYER", asVal("PRAYER").toString());
+        updateItem("COMMUNICATION", asVal("COMMUNICATION").toString());
+        updateItem("SETTINGS", settings?.toString() || "");
+        updateItem("SETUP LOSS", setupLoss?.toString() || "");
+
+        breakHourProcess.markModified("data");
+      } else {
+        const newBreakHourRow = {
+          rowDataId,
+          items: [
+            { key: "DRM", value: asVal("DRM").toString(), process: "value" },
+            {
+              key: "TEA BREAK",
+              value: asVal("TEA").toString(),
+              process: "value",
+            },
+            { key: "FOOD", value: asVal("FOOD").toString(), process: "value" },
+            {
+              key: "INSPECTION",
+              value: asVal("INSPECTION").toString(),
+              process: "value",
+            },
+            {
+              key: "PRAYER",
+              value: asVal("PRAYER").toString(),
+              process: "value",
+            },
+            {
+              key: "COMMUNICATION",
+              value: asVal("COMMUNICATION").toString(),
+              process: "value",
+            },
+            {
+              key: "SETTINGS",
+              value: settings?.toString() || "",
+              process: "value",
+            },
+            {
+              key: "SETUP LOSS",
+              value: setupLoss?.toString() || "",
+              process: "value",
+            },
+            ...[
+              "TOOL CHANGE",
+              "VERIFICATION",
+              "LOAD/ UNLOAD LOSS",
+              "DEFECTS/ REWORK",
+              "BREAKDOWN",
+              "MAINTENANCE",
+              "NO POWER",
+              "NO MAN POWER",
+              "NO SCHEDULE",
+              "NO MATERIAL",
+              "NO DRAWING",
+              "NPD",
+            ].map((k) => ({ key: k, value: "0", process: "value" })),
+          ],
+        };
+        breakHourProcess.data.push(newBreakHourRow);
+      }
+
+      breakHourProcess.updatedBy = userId;
+      await breakHourProcess.save();
     }
 
     return { success: true };
@@ -1726,7 +1912,7 @@ exports.handleDeleteIntersection = async (
   process,
   rowId,
   userId,
-  currentRow
+  currentRow,
 ) => {
   try {
     // Utility function to delete linked rows safely

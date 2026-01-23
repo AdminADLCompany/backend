@@ -210,7 +210,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     process,
     items,
     rowDataId,
-    req.user._id
+    req.user._id,
   );
 
   if (intersectionResponse && intersectionResponse.success) {
@@ -242,13 +242,13 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       });
       if (!settingsProcess || !breakHourProcess)
         return next(
-          new ErrorHandler("No Settings or Break Process Found", 404)
+          new ErrorHandler("No Settings or Break Process Found", 404),
         );
 
       const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
       const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
       const cycleTime = Number(
-        items.find((i) => i.key === "CYCLE TIME")?.value
+        items.find((i) => i.key === "CYCLE TIME")?.value,
       );
       const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
       const reject = Number(items.find((i) => i.key === "REJECT")?.value);
@@ -353,8 +353,8 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     return next(
       new ErrorHandler(
         intersectionResponse?.message || "Intersection Processing Failed",
-        intersectionResponse?.statusCode || 400
-      )
+        intersectionResponse?.statusCode || 400,
+      ),
     );
   }
 });
@@ -450,7 +450,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     row,
     req.user._id,
     rowId,
-    previousItems
+    previousItems,
   );
 
   if (intersectionResponse && intersectionResponse.success) {
@@ -476,8 +476,8 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     return next(
       new ErrorHandler(
         intersectionResponse?.message || "Intersection Processing Failed",
-        intersectionResponse?.statusCode || 400
-      )
+        intersectionResponse?.statusCode || 400,
+      ),
     );
   }
 });
@@ -485,7 +485,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
 // DELETE row by rowId
 exports.deleteData = catchAsyncErrors(async (req, res, next) => {
   const process = await Process.findById(req.params.id);
-  const { rowId } = req.body;
+  const { rowId, userId } = req.body;
 
   if (!process) {
     return next(new ErrorHandler("Process not found", 404));
@@ -496,15 +496,15 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
     process,
     rowId,
     req.user._id,
-    currentRow
+    currentRow,
   );
 
   if (intersectionResponse && !intersectionResponse.success) {
     return next(
       new ErrorHandler(
         intersectionResponse?.message || "Intersection Delete Failed",
-        intersectionResponse?.statusCode || 400
-      )
+        intersectionResponse?.statusCode || 400,
+      ),
     );
   }
 
@@ -518,17 +518,17 @@ exports.deleteData = catchAsyncErrors(async (req, res, next) => {
     });
 
     const planNumber = currentRow.items.find(
-      (item) => item.key === "PLAN NO"
+      (item) => item.key === "PLAN NO",
     )?.value;
 
     if (procurementProcess) {
       const rowsToDelete = procurementProcess.data.filter(
-        (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber
+        (r) => r.items.find((i) => i.key === "PL NO")?.value === planNumber,
       );
       procurementProcess.data = procurementProcess.data.filter(
-        (r) => !rowsToDelete.includes(r)
+        (r) => !rowsToDelete.includes(r),
       );
-      procurementProcess.updatedBy = userId;
+      procurementProcess.updatedBy = req.user._id ?? userId;
       await procurementProcess.save();
     }
   }
