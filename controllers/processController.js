@@ -299,7 +299,10 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         qlStatusItem.value =
           quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
       }
-    } else if (process.processId === "DD/R/002") {
+    }
+
+    // ---------------- DD/R/002 () ----------------
+    else if (process.processId === "DD/R/002") {
       const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
       if (!itemListProcess)
         throw new ErrorHandler("Item List Process (PR/R/002) not found", 404);
@@ -625,11 +628,21 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   // Use Sets to remove duplicates from customer list
   const customerName = new Set();
 
+  let groupOfItems = [];
   productsProcess.data.forEach((row) => {
     const pNo = row.items.find((i) => i.key === "PART NO")?.value;
     const pName = row.items.find((i) => i.key === "PART NAME")?.value;
     const pType = row.items.find((i) => i.key === "TYPE")?.value;
     const pMaterial = row.items.find((i) => i.key === "MATERIAL")?.value;
+
+    groupOfItems.push([
+      {
+        "PART-NO": pNo,
+        "PART-NAME": pName,
+        TYPE: pType,
+        MATERIAL: pMaterial,
+      },
+    ]);
 
     if (pNo) partNo.add(pNo);
     if (pName) partName.add(pName);
@@ -637,20 +650,41 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     if (pMaterial) material.add(pMaterial);
   });
 
+  let groupOfItemList = [];
   itemListProcess.data.forEach((row) => {
     const iName = row.items.find((i) => i.key === "ITEM NAME")?.value;
     const grade = row.items.find((i) => i.key === "ITEM GRADE")?.value;
+
+    groupOfItemList.push([
+      {
+        "ITEM-NAME": iName,
+        GRADE: grade,
+      },
+    ]);
+
     if (iName) itemName.add(iName);
     if (grade) itemGrade.add(grade);
   });
 
+  let groupOfVendorList = [];
   vendorListProcess.data.forEach((row) => {
     const vName = row.items.find((i) => i.key === "VENDOR NAME")?.value;
+    groupOfVendorList.push([
+      {
+        "VENDOR-NAME": vName,
+      },
+    ]);
     if (vName) vendorName.add(vName);
   });
 
+  let groupOfCustomerList = [];
   customerListProcess.data.forEach((row) => {
     const cName = row.items.find((i) => i.key === "CUSTOMER NAME")?.value;
+    groupOfCustomerList.push([
+      {
+        "CUSTOMER-NAME": cName,
+      },
+    ]);
     if (cName) customerName.add(cName);
   });
 
@@ -668,6 +702,10 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: response,
+    groupOfItems,
+    groupOfItemList,
+    groupOfVendorList,
+    groupOfCustomerList,
   });
 });
 
