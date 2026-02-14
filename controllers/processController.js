@@ -299,22 +299,19 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         qlStatusItem.value =
           quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
       }
-    }
-
-    else if (process.processId === "MS/R/006A") {
+    } else if (process.processId === "MS/R/006A") {
       const orderProcess = await Process.findOne({
-              processId: "MS/R/006",
-            });
-          const orderRow = orderProcess.data.find(
+        processId: "MS/R/006",
+      });
+      const orderRow = orderProcess.data.find(
         (row) => row._id.toString() === rowDataId.toString(),
       );
-       const qty = orderRow.items.find(
-        (item) => item.key === "QTY",
-      )?.value;
+      const qty = orderRow.items.find((item) => item.key === "QTY")?.value;
 
-      const deliveryQty = items.find((i) => i.key === 'DELIVERY QTY')?.value;
+      const deliveryQty = items.find((i) => i.key === "DELIVERY QTY")?.value;
       const pendingQty = items.find((i) => i.key === "PENDING QTY");
-      if (pendingQty) pendingQty.value = String(Number(qty) - Number(deliveryQty));
+      if (pendingQty)
+        pendingQty.value = String(Number(qty) - Number(deliveryQty));
     }
 
     // ---------------- DD/R/002 () ----------------
@@ -463,14 +460,20 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   row.items = items;
   process.updatedBy = req.user._id;
 
-  const intersectionResponse = await handleUpdateIntersection(
-    process,
-    items,
-    row,
-    req.user._id,
-    rowId,
-    previousItems,
-  );
+  let intersectionResponse;
+
+  if (process.processId !== "DD/R/014") {
+    intersectionResponse = await handleUpdateIntersection(
+      process,
+      items,
+      row,
+      req.user._id,
+      rowId,
+      previousItems,
+    );
+  } else {
+    intersectionResponse = { success: true };
+  }
 
   if (intersectionResponse && intersectionResponse.success) {
     // Save process only if intersection succeeds
@@ -618,6 +621,9 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
   const vendorListProcess = await Process.findOne({ processId: "PR/R/001" });
   const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
+  const productionPlanProcess = await Process.findOne({
+    processId: "MR/R/001",
+  });
 
   if (
     !productsProcess ||
@@ -644,6 +650,9 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
 
   // Use Sets to remove duplicates from customer list
   const customerName = new Set();
+
+  // Use Sets to remove duplicates from production plan
+  const planNumber = new Set();
 
   let groupOfItems = [];
   productsProcess.data.forEach((row) => {
@@ -712,6 +721,20 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     if (cName) customerName.add(cName);
   });
 
+  let groupOfProductionPlan = [];
+  productionPlanProcess.data.forEach((row) => {
+    const planNo = row.items.find((i) => i.key === "PLAN NO")?.value;
+    const assembly = row.items.find((i) => i.key === "ASSEMBLY")?.value;
+
+    groupOfProductionPlan.push([
+      {
+        "PLAN-NO": planNo,
+      },
+    ]);
+
+    if (planNo && assembly !== "COMPLETED") planNumber.add(planNo);
+  });
+
   const response = [
     { key: "PART-NO", value: Array.from(partNo) },
     { key: "PART-NAME", value: Array.from(partName) },
@@ -722,6 +745,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "GRADE", value: Array.from(itemGrade) },
     { key: "CUSTOMER-NAME", value: Array.from(customerName) },
     { key: "ITEM_CODE", value: Array.from(itemCode) },
+    { key: "PLAN-NO", value: Array.from(planNumber) },
   ];
 
   res.status(200).json({
@@ -731,6 +755,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     groupOfItemList,
     groupOfVendorList,
     groupOfCustomerList,
+    groupOfProductionPlan,
   });
 });
 

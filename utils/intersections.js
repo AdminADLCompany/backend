@@ -2251,7 +2251,9 @@ exports.handleUpdateIntersection = async (
 
       breakHourProcess.updatedBy = userId;
       await breakHourProcess.save();
-    } else if (process.processId === "MR/R/002") {
+    } 
+    
+    else if (process.processId === "MR/R/002") {
       const rejectionReportProcess = await Process.findOne({
         processId: "MR/R/003",
       });
@@ -2332,6 +2334,10 @@ exports.handleUpdateIntersection = async (
           await rejectionReportProcess.save();
         }
       }
+    }
+
+    else {
+      return { success: true }
     }
 
     return { success: true };
