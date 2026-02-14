@@ -254,7 +254,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       const reject = Number(items.find((i) => i.key === "REJECT")?.value);
       const oeeItem = items.find((i) => i.key === "OEE");
       const settingColor = items.find((i) => i.key === "SETTING");
-      settingColor.process = "red";
+      settingColor.process = "blue";
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
       const totalTime = end - start;
@@ -299,6 +299,22 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         qlStatusItem.value =
           quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
       }
+    }
+
+    else if (process.processId === "MS/R/006A") {
+      const orderProcess = await Process.findOne({
+              processId: "MS/R/006",
+            });
+          const orderRow = orderProcess.data.find(
+        (row) => row._id.toString() === rowDataId.toString(),
+      );
+       const qty = orderRow.items.find(
+        (item) => item.key === "QTY",
+      )?.value;
+
+      const deliveryQty = items.find((i) => i.key === 'DELIVERY QTY')?.value;
+      const pendingQty = items.find((i) => i.key === "PENDING QTY");
+      if (pendingQty) pendingQty.value = String(Number(qty) - Number(deliveryQty));
     }
 
     // ---------------- DD/R/002 () ----------------
@@ -621,6 +637,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   // Use Sets to remove duplicates from item list
   const itemName = new Set();
   const itemGrade = new Set();
+  const itemCode = new Set();
 
   // Use Sets to remove duplicates from vendor list
   const vendorName = new Set();
@@ -654,16 +671,23 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   itemListProcess.data.forEach((row) => {
     const iName = row.items.find((i) => i.key === "ITEM NAME")?.value;
     const grade = row.items.find((i) => i.key === "ITEM GRADE")?.value;
+    const iCode = row.items.find((i) => i.key === "ITEM CODE")?.value;
+
+    const itemCategory = row.items.find(
+      (i) => i.key === "ITEM CATEGORY",
+    )?.value;
 
     groupOfItemList.push([
       {
         "ITEM-NAME": iName,
         GRADE: grade,
+        "ITEM-CODE": iCode,
       },
     ]);
 
     if (iName) itemName.add(iName);
     if (grade) itemGrade.add(grade);
+    if (iCode && itemCategory === "FINISHED GOOD") itemCode.add(iCode);
   });
 
   let groupOfVendorList = [];
@@ -697,6 +721,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "VENDOR-NAME", value: Array.from(vendorName) },
     { key: "GRADE", value: Array.from(itemGrade) },
     { key: "CUSTOMER-NAME", value: Array.from(customerName) },
+    { key: "ITEM_CODE", value: Array.from(itemCode) },
   ];
 
   res.status(200).json({
