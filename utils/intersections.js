@@ -970,7 +970,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               process: "select",
             },
           ],
-          rowDataId: row.rowDataId,
+          rowDataId: rowDataId,
         };
 
         orderListRow.items = await linkProcessIdItems(orderListRow.items);
