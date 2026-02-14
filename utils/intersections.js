@@ -1195,6 +1195,86 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const NPDRegisterProcess = await Process.findOne({
         processId: "DD/R/010",
       });
+
+      // if (!NPDRegisterProcess)
+      //   return {
+      //     success: false,
+      //     message: "NPD Register Process not found",
+      //     statusCode: 404,
+      //   };
+
+      // const correspondingItem = NPDRegisterProcess.data.find(
+      //   (d) => d._id.toString() === rowDataId.toString(),
+      // );
+
+      // if (!correspondingItem)
+      //   return {
+      //     success: false,
+      //     message: "Corresponding NPD row not found",
+      //     statusCode: 404,
+      //   };
+
+      // const protoItem = correspondingItem.items.find((i) => i.key === "PROTO");
+      // const validationItem = correspondingItem.items.find(
+      //   (i) => i.key === "VALIDATION",
+      // );
+      // const masterPieceItem = correspondingItem.items.find(
+      //   (i) => i.key === "MASTER PIECE",
+      // );
+
+      // if (!protoItem)
+      //   return {
+      //     success: false,
+      //     message: "PROTO item not found",
+      //     statusCode: 404,
+      //   };
+
+      // const hasPending = items.some((i) => i.value === "Pending");
+      // const hasInProgress = items.some((i) => i.value === "In Progress");
+      // const allCompleted =
+      //   items.length > 0 && items.every((i) => i.value === "Completed");
+
+      // const validationColor = items.find((i) => i.key === "VALIDATION");
+      // const masterColor = items.find((i) => i.key === "MASTER PIECE");
+
+      // if (validationItem) {
+      //   if (validationColor?.value === "Pending") {
+      //     validationItem.process = "red";
+      //   } else if (validationColor?.value === "In Progress") {
+      //     validationItem.process = "orange";
+      //   } else if (validationColor?.value === "Completed") {
+      //     validationItem.process = "green";
+      //   } else {
+      //     validationItem.process = "red";
+      //   }
+      // }
+
+      // if (masterPieceItem) {
+      //   if (masterColor?.value === "Pending") {
+      //     masterPieceItem.process = "red";
+      //   } else if (masterColor?.value === "In Progress") {
+      //     masterPieceItem.process = "orange";
+      //   } else if (masterColor?.value === "Completed") {
+      //     masterPieceItem.process = "green";
+      //   } else {
+      //     masterPieceItem.process = "red";
+      //   }
+      // }
+
+      // if (hasPending) {
+      //   protoItem.process = "red";
+      // } else if (hasInProgress) {
+      //   protoItem.process = "orange";
+      // } else if (allCompleted) {
+      //   protoItem.process = "green";
+      // } else {
+      //   protoItem.process = "gray";
+      // }
+
+      // NPDRegisterProcess.markModified("data");
+      // NPDRegisterProcess.updatedBy = userId;
+
+      // await NPDRegisterProcess.save();
     }
     // Write one else of the Break hour creation.
     else if (process.processId === "MR/R/002B") {
@@ -2005,7 +2085,7 @@ exports.handleUpdateIntersection = async (
         (i) => i.key === "VALIDATION",
       );
       const masterPieceItem = correspondingItem.items.find(
-        (i) => i.key === "MASTER",
+        (i) => i.key === "MASTER PIECE",
       );
 
       if (!protoItem)
@@ -2061,6 +2141,58 @@ exports.handleUpdateIntersection = async (
       NPDRegisterProcess.updatedBy = userId;
 
       await NPDRegisterProcess.save();
+    }
+
+    // ---- DD/R/010 (Register Edit) pulling status from DD/R/012
+    else if (process.processId === "DD/R/010") {
+      const d12Process = await Process.findOne({ processId: "DD/R/012" });
+      if (d12Process) {
+        const d12Row = d12Process.data.find(
+          (r) => r.rowDataId && r.rowDataId.toString() === rowId.toString(),
+        );
+        if (d12Row) {
+          const d12Items = d12Row.items;
+          const protoItem = items.find((i) => i.key === "PROTO");
+          const validationItem = items.find((i) => i.key === "VALIDATION");
+          const masterPieceItem = items.find((i) => i.key === "MASTER PIECE");
+
+          const hasPending = d12Items.some((i) => i.value === "Pending");
+          const hasInProgress = d12Items.some((i) => i.value === "In Progress");
+          const allCompleted =
+            d12Items.length > 0 &&
+            d12Items.every((i) => i.value === "Completed");
+
+          const validationColor = d12Items.find((i) => i.key === "VALIDATION");
+          const masterColor = d12Items.find((i) => i.key === "MASTER PIECE");
+
+          if (validationItem) {
+            if (validationColor?.value === "Pending")
+              validationItem.process = "red";
+            else if (validationColor?.value === "In Progress")
+              validationItem.process = "orange";
+            else if (validationColor?.value === "Completed")
+              validationItem.process = "green";
+            else validationItem.process = "red";
+          }
+
+          if (masterPieceItem) {
+            if (masterColor?.value === "Pending")
+              masterPieceItem.process = "red";
+            else if (masterColor?.value === "In Progress")
+              masterPieceItem.process = "orange";
+            else if (masterColor?.value === "Completed")
+              masterPieceItem.process = "green";
+            else masterPieceItem.process = "red";
+          }
+
+          if (protoItem) {
+            if (hasPending) protoItem.process = "red";
+            else if (hasInProgress) protoItem.process = "orange";
+            else if (allCompleted) protoItem.process = "green";
+            else protoItem.process = "gray";
+          }
+        }
+      }
     }
 
     //
@@ -2251,9 +2383,7 @@ exports.handleUpdateIntersection = async (
 
       breakHourProcess.updatedBy = userId;
       await breakHourProcess.save();
-    } 
-    
-    else if (process.processId === "MR/R/002") {
+    } else if (process.processId === "MR/R/002") {
       const rejectionReportProcess = await Process.findOne({
         processId: "MR/R/003",
       });
@@ -2334,10 +2464,8 @@ exports.handleUpdateIntersection = async (
           await rejectionReportProcess.save();
         }
       }
-    }
-
-    else {
-      return { success: true }
+    } else {
+      return { success: true };
     }
 
     return { success: true };
