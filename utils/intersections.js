@@ -1760,53 +1760,121 @@ exports.handleUpdateIntersection = async (
       }
     }
 
-    // ---- MR/R/001 → PR/R/003 ----
+    // ---- MR/R/001 → PR/R/003 (Production Plan → Procurement Register) ----
     else if (process.processId === "MR/R/001") {
-      const procurementProcess = await Process.findOne({
+      const procurementRegisterProcess = await Process.findOne({
         processId: "PR/R/003",
       });
-      const planNumber = items.find((i) => i.key === "PLAN NO")?.value;
+      const itemListProcess = await Process.findOne({ processId: "PR/R/002" });
+      const BOM = await Process.findOne({ processId: "DD/R/002" });
+      const Products = await Process.findOne({ processId: "DD/R/002A" });
+
+      if (
+        !procurementRegisterProcess ||
+        !BOM ||
+        !Products ||
+        !itemListProcess
+      ) {
+        return { success: true };
+      }
+
+      const MoveItem = items.find((i) => i.key === "RM")?.value;
+      if (MoveItem !== "Planning") return { success: true };
+
+      // Check if already in procurement by rowDataId (linking to the production plan row _id)
+      const exists = procurementRegisterProcess.data.some(
+        (r) => r.rowDataId?.toString() === rowId.toString(),
+      );
+      if (exists) return { success: true };
+
+      const planNo = items.find((i) => i.key === "PLAN NO")?.value;
       const date = items.find((i) => i.key === "DATE")?.value;
-      const partNo = items.find((i) => i.key === "PART NO")?.value;
-      const partName = items.find((i) => i.key === "PART NAME")?.value;
+      const partNo =
+        items.find((i) => i.key === "PART-NO") ||
+        items.find((i) => i.key === "PART NO");
+      const partName =
+        items.find((i) => i.key === "PART-NAME") ||
+        items.find((i) => i.key === "PART NAME");
       const type = items.find((i) => i.key === "TYPE")?.value;
       const material = items.find((i) => i.key === "MATERIAL")?.value;
-      const planQty = Number(items.find((i) => i.key === "PLAN QTY")?.value);
-      const previousPlanQty = Number(
-        previousItems.find((i) => i.key === "PLAN QTY")?.value,
+      const planQty = parseFloat(
+        items.find((i) => i.key === "PLAN QTY")?.value || 0,
       );
 
-      if (procurementProcess && planNumber) {
-        for (const prRow of procurementProcess.data) {
-          const plNo = prRow.items.find((i) => i.key === "PL NO")?.value;
-          if (plNo !== planNumber) continue;
+      const bomDict = Object.fromEntries(
+        BOM.data.map((b) => [b._id.toString(), b]),
+      );
+      const matchingProducts = Products.data.filter((productRow) => {
+        const p = Object.fromEntries(
+          productRow.items.map((i) => [i.key, i.value]),
+        );
+        return (
+          p["PART NO"] === partNo?.value &&
+          p["PART NAME"] === partName?.value &&
+          p["TYPE"] === type &&
+          p["MATERIAL"] === material
+        );
+      });
 
-          const prQuantity = Number(
-            prRow.items.find((i) => i.key === "QTY")?.value || 0,
+      for (const productRow of matchingProducts) {
+        const detailingIds =
+          productRow.items.find((i) => i.key === "DETAILING PRODUCT")?.value ||
+          [];
+        for (const bomId of detailingIds) {
+          const bomRow = bomDict[bomId.toString()];
+          if (!bomRow) continue;
+
+          const b = Object.fromEntries(
+            bomRow.items.map((i) => [i.key, i.value]),
           );
-          const bomQuantity = previousPlanQty
-            ? Number(prQuantity / previousPlanQty)
-            : 0;
-          const newQuantity = Number(planQty * bomQuantity) || 0;
+          const totalQty = parseFloat(b["QTY"] || 0) * planQty;
 
-          const updateValue = (key, val) => {
-            const item = prRow.items.find((i) => i.key === key);
-            if (item) item.value = val;
+          const inputItemCode = b["ITEM CODE"];
+          const matchRow = itemListProcess.data.find((itemRow) => {
+            const rowItemCode = itemRow.items
+              .find((i) => i.key === "ITEM CODE")
+              ?.value?.trim();
+            return rowItemCode === inputItemCode;
+          });
+
+          let procurementRegisterRow = {
+            items: [
+              { key: "DATE", value: date, process: "date" },
+              { key: "PL NO", value: planNo },
+              { key: "PART NO", value: partNo?.value || "" },
+              { key: "PART NAME", value: partName?.value || "" },
+              { key: "TYPE", value: type },
+              { key: "MATERIAL", value: material },
+              {
+                key: "ITEM CATEGORY",
+                value:
+                  matchRow?.items.find((i) => i.key === "ITEM CATEGORY")
+                    ?.value || "",
+              },
+              { key: "ITEM CODE", value: b["ITEM CODE"] },
+              { key: "ITEM NAME", value: b["ITEM-NAME"] },
+              { key: "GRADE", value: b["GRADE"] },
+              { key: "QTY", value: totalQty.toString() },
+              { key: "UNITS", value: b["UNITS"] },
+              { key: "VENDOR NAME", value: "" },
+              { key: "VALUE", value: "" },
+              { key: "PO NO", value: "" },
+              { key: "LEAD TIME", value: "" },
+              { key: "INWARD", value: "PR/R/003A", process: "processId" },
+              { key: "PR STATUS", value: "" },
+            ],
+            rowDataId: rowId,
           };
 
-          updateValue("QTY", newQuantity.toString());
-          updateValue("DATE", date);
-          updateValue("PART NO", partNo);
-          updateValue("PART NAME", partName);
-          updateValue("TYPE", type);
-          updateValue("MATERIAL", material);
-
-          prRow.updatedAt = new Date();
-          prRow.updatedBy = userId;
+          procurementRegisterRow.items = await linkProcessIdItems(
+            procurementRegisterRow.items,
+          );
+          procurementRegisterProcess.data.push(procurementRegisterRow);
         }
-
-        await procurementProcess.save();
       }
+
+      procurementRegisterProcess.updatedBy = userId;
+      await procurementRegisterProcess.save();
     }
 
     // ---- PR/R/003A → PR/R/003 ----
