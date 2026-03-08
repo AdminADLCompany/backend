@@ -5,7 +5,7 @@ const History = require("../models/history"); // for fetching history
 
 // ✅ Get all departments
 exports.getAllDepartments = catchAsyncErrors(async (req, res, next) => {
-  const departments = await Department.find().populate("updatedBy", "userName email");
+  const departments = await Department.find().populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -15,7 +15,7 @@ exports.getAllDepartments = catchAsyncErrors(async (req, res, next) => {
 
 // ✅ Get department by ID
 exports.getDepartmentById = catchAsyncErrors(async (req, res, next) => {
-  const department = await Department.findById(req.params.id).populate("updatedBy", "userName email");
+  const department = await Department.findById(req.params.id).populate("updatedBy", "name email");
 
   if (!department) {
     return next(new ErrorHandler("Department not found", 404));
@@ -41,7 +41,7 @@ exports.createDepartment = catchAsyncErrors(async (req, res, next) => {
     updatedBy: req.user._id
   });
 
-  await department.populate("updatedBy", "email userName");
+  await department.populate("updatedBy", "email name");
 
   res.status(201).json({
     success: true,
@@ -70,7 +70,7 @@ exports.updateDepartment = catchAsyncErrors(async (req, res, next) => {
 
   await department.save(); // ✅ triggers plugin
 
-  await department.populate("updatedBy", "userName email");
+  await department.populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -108,7 +108,7 @@ exports.addProcess = catchAsyncErrors(async (req, res, next) => {
   department.updatedBy = req.user._id;
 
   await department.save(); // ✅ triggers plugin
-  await department.populate("updatedBy", "email userName");
+  await department.populate("updatedBy", "email name");
 
   res.status(200).json({
     success: true,
@@ -129,7 +129,7 @@ exports.deleteProcess = catchAsyncErrors(async (req, res, next) => {
   department.updatedBy = req.user._id;
 
   await department.save(); // ✅ triggers plugin
-  await department.populate("updatedBy", "email userName");
+  await department.populate("updatedBy", "email name");
 
   res.status(200).json({
     success: true,
@@ -143,7 +143,7 @@ exports.getDepartmentHistory = catchAsyncErrors(async (req, res, next) => {
     collectionName: "Department",
     documentId: req.params.id
   })
-    .populate("changedBy", "userName email")
+    .populate("changedBy", "name email")
     .sort({ timestamp: -1 });
 
   res.status(200).json({

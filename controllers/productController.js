@@ -6,7 +6,7 @@ const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 exports.getAllProducts = catchAsyncErrors( async (req, res, next) => {
   const products = await Product.find();
 
-  await Product.populate(products, { path: "updatedBy", select: "userName email" });
+  await Product.populate(products, { path: "updatedBy", select: "name email" });
 
   res.status(200).json({
     success: true,
@@ -18,7 +18,7 @@ exports.getAllProducts = catchAsyncErrors( async (req, res, next) => {
 exports.getProductById = catchAsyncErrors( async (req, res, next) => {
   const product = await Product.findById(req.params.id);
 
-  await Product.populate(product, { path: "updatedBy", select: "userName email" });
+  await Product.populate(product, { path: "updatedBy", select: "name email" });
 
   if (!product) {
     return next(new ErrorHandler("Product not found", 404));
@@ -66,7 +66,7 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
   });
 
   // Populate user details before sending response
-  await product.populate("updatedBy", "userName email");
+  await product.populate("updatedBy", "name email");
 
   res.status(201).json({
     success: true,
@@ -84,7 +84,7 @@ exports.updateProduct = catchAsyncErrors(async (req, res, next) => {
 
     const product = await Product.findByIdAndUpdate(req.params.id, updates, {
         new: true
-    }).populate("updatedBy", "userName email");
+    }).populate("updatedBy", "name email");
 
     if (!product) {
         return next(new ErrorHandler("Product not found", 404));
@@ -100,7 +100,7 @@ exports.deleteProduct = catchAsyncErrors( async (req, res, next) => {
   
     const product = await Product.findByIdAndDelete(req.params.id);
 
-    await Product.populate(product, { path: "updatedBy", select: "userName email" });
+    await Product.populate(product, { path: "updatedBy", select: "name email" });
 
     if (!product) {
         return next(new ErrorHandler("Product not found", 404));
@@ -127,7 +127,7 @@ exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
       updatedBy: req.user._id
     },
     { new: true, runValidators: true }
-  ).populate("updatedBy", "userName email");
+  ).populate("updatedBy", "name email");
 
   if (!product) {
     return next(new ErrorHandler("Product not found", 404));

@@ -65,7 +65,7 @@ exports.getAllProcesses = catchAsyncErrors(async (req, res, next) => {
   // populate process and updatedBy
   const processes = await Process.find()
     .populate("department")
-    .populate("updatedBy", "userName email");
+    .populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -76,7 +76,7 @@ exports.getAllProcesses = catchAsyncErrors(async (req, res, next) => {
 exports.getProcessById = catchAsyncErrors(async (req, res, next) => {
   const process = await Process.findById(req.params.id)
     .populate("department")
-    .populate("updatedBy", "userName email");
+    .populate("updatedBy", "name email");
 
   if (!process) {
     return next(new ErrorHandler("Process not found", 404));
@@ -91,7 +91,7 @@ exports.getProcessById = catchAsyncErrors(async (req, res, next) => {
 exports.getProcessByDepartmentId = catchAsyncErrors(async (req, res, next) => {
   const processes = await Process.find({ department: req.params.id })
     .populate("department")
-    .populate("updatedBy", "userName email");
+    .populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -111,7 +111,7 @@ exports.createProcess = catchAsyncErrors(async (req, res, next) => {
   });
 
   await processes.populate("department");
-  await processes.populate("updatedBy", "userName email");
+  await processes.populate("updatedBy", "name email");
 
   res.status(201).json({
     success: true,
@@ -137,7 +137,7 @@ exports.updateProcess = catchAsyncErrors(async (req, res, next) => {
 
   // Populate references
   await process.populate("department");
-  await process.populate("updatedBy", "userName email");
+  await process.populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -453,6 +453,69 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         workingTime) *
       100;
     oeeItem.value = Math.floor(OEE);
+  } else if (process.processId === "DD/R/010") {
+    // Sync process statuses from DD/R/012 (Detailed NPD Checklist)
+    const d12Process = await Process.findOne({ processId: "DD/R/012" });
+    if (d12Process) {
+      const d12Row = d12Process.data.find(
+        (r) => r.rowDataId && r.rowDataId.toString() === rowId.toString(),
+      );
+      if (d12Row) {
+        const d12Items = d12Row.items;
+        const protoItem = items.find((i) => i.key === "PROTO");
+        const validationItem = items.find((i) => i.key === "VALIDATION");
+        const masterPieceItem =
+          items.find((i) => i.key === "MASTER PIECE") ||
+          items.find((i) => i.key === "MASTER");
+
+        const hasPending = d12Items.some((i) => i.value === "Pending");
+        const hasInProgress = d12Items.some((i) => i.value === "In Progress");
+        const allCompleted =
+          d12Items.length > 0 && d12Items.every((i) => i.value === "Completed");
+
+        const validationColor = d12Items.find((i) => i.key === "VALIDATION");
+        const masterColor =
+          d12Items.find((i) => i.key === "MASTER PIECE") ||
+          d12Items.find((i) => i.key === "MASTER");
+
+        // VALIDATION Sync
+        if (validationItem) {
+          // if (validationColor) validationItem.value = validationColor.value;
+          const status = validationColor?.value;
+          if (status === "Pending") validationItem.process = "red";
+          else if (status === "In Progress") validationItem.process = "orange";
+          else if (status === "Completed") validationItem.process = "green";
+          else validationItem.process = "red";
+        }
+
+        // MASTER PIECE Sync
+        if (masterPieceItem) {
+          // if (masterColor) masterPieceItem.value = masterColor.value;
+          const status = masterColor?.value;
+          if (status === "Pending") masterPieceItem.process = "red";
+          else if (status === "In Progress") masterPieceItem.process = "orange";
+          else if (status === "Completed") masterPieceItem.process = "green";
+          else masterPieceItem.process = "red";
+        }
+
+        // PROTO Summary Status Sync
+        if (protoItem) {
+          if (hasPending) {
+            protoItem.process = "red";
+            // protoItem.value = "Pending";
+          } else if (hasInProgress) {
+            protoItem.process = "orange";
+            // protoItem.value = "In Progress";
+          } else if (allCompleted) {
+            protoItem.process = "green";
+            // protoItem.value = "Completed";
+          } else {
+            protoItem.process = "gray";
+            // protoItem.value = "Pending";
+          }
+        }
+      }
+    }
   }
 
   // Update row data
@@ -584,7 +647,7 @@ exports.getaProcessHistory = catchAsyncErrors(async (req, res, next) => {
     collectionName: "Process",
     documentId: req.params.id,
   })
-    .populate("changedBy", "userName email")
+    .populate("changedBy", "name email")
     .sort({ timestamp: -1 });
 
   res.status(200).json({
@@ -602,7 +665,7 @@ exports.getProcessRowHistory = catchAsyncErrors(async (req, res, next) => {
     documentId: id,
     rowId: rowId,
   })
-    .populate("changedBy", "userName email")
+    .populate("changedBy", "name email")
     .sort({ timestamp: -1 });
 
   if (!history.length) {
@@ -766,5 +829,462 @@ exports.deleteAllProcessData = catchAsyncErrors(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: [],
+  });
+});
+
+exports.getDashBoardDetailsByDepartment = catchAsyncErrors(
+  async (req, res, next) => {
+    const department = req.params.department;
+  },
+);
+
+exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
+  const [
+    productionPlanProcess,
+    productionReportProcess,
+    rejectReportProcess,
+    reworkReportProcess,
+    dispatchProcess,
+    npdRegisterProcess,
+    productsProcess,
+    calibrationReportProcess,
+    incomingInspectionProcess,
+    customerComplientRegisterProcess,
+    customerListProcess,
+    quotationListProcess,
+    orderListProcess,
+    procurementProcess,
+    stockDataProcess,
+  ] = await Promise.all([
+    Process.findOne({ processId: "MR/R/001" }),
+    Process.findOne({ processId: "MR/R/002" }),
+    Process.findOne({ processId: "MR/R/003" }),
+    Process.findOne({ processId: "MR/R/003A" }),
+    Process.findOne({ processId: "MR/R/006" }),
+    Process.findOne({ processId: "DD/R/010" }),
+    Process.findOne({ processId: "DD/R/002A" }),
+    Process.findOne({ processId: "QA/R/002A" }),
+    Process.findOne({ processId: "QA/R/003" }),
+    Process.findOne({ processId: "QA/R/007" }),
+    Process.findOne({ processId: "MS/R/004" }),
+    Process.findOne({ processId: "MS/R/005" }),
+    Process.findOne({ processId: "MS/R/006" }),
+    Process.findOne({ processId: "PR/R/003" }),
+    Process.findOne({ processId: "ST/R/006" }),
+  ]);
+
+  const { startDate, endDate, salesPerson, location } = req.body ?? {};
+
+  // Default date range: Jan 1 of the current year → Dec 31 of next year
+  const now = new Date();
+  const effectiveStart = startDate
+    ? Number(startDate)
+    : new Date(now.getFullYear(), 0, 1).getTime(); // Jan 1, this year
+  const effectiveEnd = endDate
+    ? Number(endDate)
+    : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime(); // Dec 31, next year
+
+  let response = [];
+
+  // productionPlanProcess
+  if (productionPlanProcess) {
+    // only Pending Details need to be displayed.
+    const pendingDetails = productionPlanProcess.data.filter((row) => {
+      return (
+        row.items
+          .find((item) => item.key === "STATUS")
+          ?.value?.toLowerCase() === "pending"
+      );
+    });
+    // plan qty(y-axis) need to display based on part no(x-axis)
+    let reportGraph = [];
+    productionPlanProcess.data.forEach((row) => {
+      const partNo =
+        row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
+      const planQty =
+        Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
+      reportGraph.push({ partNo, planQty });
+    });
+
+    response.push({
+      productionPlanProcess: {
+        pendingDetails: pendingDetails,
+        reportGraph: reportGraph,
+      },
+    });
+  }
+
+  // productionReportProcess
+  if (productionReportProcess) {
+    const resolvedProductionReport = productionReportProcess;
+
+    const filteredRows = resolvedProductionReport.data.filter((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+
+      const epochMs = Number(dateItem.value);
+      if (isNaN(epochMs)) return false;
+
+      if (epochMs < effectiveStart) return false;
+      if (epochMs > effectiveEnd) return false;
+      return true;
+    });
+
+    response.push({
+      productionReportProcess: {
+        totalFiltered: filteredRows.length,
+      },
+    });
+  }
+
+  // rejectReportProcess
+  if (rejectReportProcess) {
+    const actionTakenProcess = await Process.findOne({
+      processId: "MR/R/003B",
+    });
+
+    const openData = actionTakenProcess
+      ? actionTakenProcess.data.filter((row) => {
+          return (
+            row.items
+              .find((item) => item.key === "ACTION PLAN STATUS")
+              ?.value?.toLowerCase() === "open"
+          );
+        })
+      : [];
+
+    // map the filters data object rowDataId with the rejectReportProcess data _id
+    const resultData = rejectReportProcess.data.filter((row) => {
+      return openData.some(
+        (openRow) => openRow.rowDataId?.toString() === row._id.toString(),
+      );
+    });
+
+    let chartResult = 0;
+
+    if (productionReportProcess && productionReportProcess.data.length > 0) {
+      const sumOfReject = rejectReportProcess.data.reduce((acc, row) => {
+        const rejectQty =
+          Number(row.items.find((item) => item.key === "REJECT QTY")?.value) ||
+          0;
+        return acc + rejectQty;
+      }, 0);
+
+      const sumOfActual = productionReportProcess.data.reduce((acc, row) => {
+        const actualQty =
+          Number(row.items.find((item) => item.key === "ACTUAL QTY")?.value) ||
+          0;
+        return acc + actualQty;
+      }, 0);
+
+      chartResult = sumOfActual > 0 ? sumOfReject / sumOfActual : 0;
+    }
+
+    response.push({
+      rejectReportProcess: {
+        totalFiltered: resultData.length,
+        data: resultData,
+        chartResult: chartResult,
+      },
+    });
+  }
+
+  // reworkReportProcess
+  if (reworkReportProcess) {
+    // filter the open status
+    const openData = reworkReportProcess.data.filter((row) => {
+      return (
+        row.items
+          .find((item) => item.key === "RR STATUS")
+          ?.value?.toLowerCase() === "open"
+      );
+    });
+
+    response.push({
+      reworkReportProcess: {
+        totalFiltered: openData.length,
+        data: openData,
+      },
+    });
+  }
+
+  // dispatchProcess
+  if (dispatchProcess) {
+    const resolvedDispatch = dispatchProcess;
+    // pass the entire data count and data's PART-NO and DATE
+    const data = resolvedDispatch.data.map((row) => {
+      return {
+        partNo:
+          row.items.find((item) => item.key === "PART NO")?.value || "N/A",
+        date: row.items.find((item) => item.key === "DATE")?.value || null,
+      };
+    });
+
+    response.push({
+      dispatchProcess: {
+        totalFiltered: resolvedDispatch.data.length,
+        data: data,
+      },
+    });
+  }
+
+  // npdRegisterProcess  ── DD/R/010  (NPD Register)
+  // DATE field stores epoch timestamp as a string (e.g. "1772582400000")
+  // Filter rows whose DATE falls within [startDate, endDate] (both as epoch ms numbers)
+  // then group by month and year to return counts.
+  if (npdRegisterProcess) {
+    const resolvedNpd = npdRegisterProcess;
+
+    // ── filter rows by DATE field ──────────────────────────────────────────
+    const filteredRows = resolvedNpd.data.filter((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+
+      const epochMs = Number(dateItem.value);
+      if (isNaN(epochMs)) return false;
+
+      if (epochMs < effectiveStart) return false;
+      if (epochMs > effectiveEnd) return false;
+      return true;
+    });
+
+    // ── aggregate month-wise  { label: "2025-09", count: N } ──────────────
+    const monthMap = {};
+    const yearMap = {};
+
+    filteredRows.forEach((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      const epochMs = Number(dateItem.value);
+      const d = new Date(epochMs);
+
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0"); // 01-12
+      const monthKey = `${year}-${month}`;
+
+      monthMap[monthKey] = (monthMap[monthKey] || 0) + 1;
+      yearMap[year] = (yearMap[year] || 0) + 1;
+    });
+
+    // Convert to sorted arrays
+    const monthWise = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, count]) => ({ label, count }));
+
+    const yearWise = Object.entries(yearMap)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([label, count]) => ({ label: String(label), count }));
+
+    response.push({
+      npdRegisterProcess: {
+        totalFiltered: filteredRows.length,
+        monthWise,
+        yearWise,
+      },
+    });
+  }
+
+  // productsProcess
+  if (productsProcess) {
+    // Need the count of the occurance of the PART NO
+    const resolvedProducts = productsProcess;
+    const partNoCount = resolvedProducts.data.reduce((acc, row) => {
+      const partNo =
+        row.items.find((item) => item.key === "PART NO")?.value || "Unknown";
+      acc[partNo] = (acc[partNo] || 0) + 1;
+      return acc;
+    }, {});
+
+    response.push({
+      productsProcess: {
+        partNoCount,
+      },
+    });
+  }
+
+  // calibrationReportProcess
+  if (calibrationReportProcess) {
+    // filter the data of cartificate === '' or null and date shoudl be 10 lesser than or equal to todays date
+    const resolvedCalibration = calibrationReportProcess;
+    const filteredCalibration = resolvedCalibration.data.filter((row) => {
+      const certificate = row.items.find(
+        (item) => item.key === "CERTIFICATE",
+      )?.value;
+      const date = row.items.find((item) => item.key === "DATE")?.value;
+      return (
+        certificate === "" ||
+        certificate === null ||
+        date <= Date.now() - 10 * 24 * 60 * 60 * 1000
+      );
+    });
+    // give the count of done and due "DONE" == 'Done' || 'Due'
+    const doneCount = filteredCalibration.filter((row) => {
+      const status = row.items.find((item) => item.key === "DONE")?.value;
+      return status?.toLowerCase() === "done";
+    }).length;
+    const dueCount = filteredCalibration.filter((row) => {
+      const status = row.items.find((item) => item.key === "DONE")?.value;
+      return status?.toLowerCase() === "due";
+    }).length;
+    response.push({
+      calibrationReportProcess: {
+        totalFiltered: filteredCalibration.length,
+        data: filteredCalibration,
+        doneCount,
+        dueCount,
+      },
+    });
+  }
+
+  // incomingInspectionProcess
+  if (incomingInspectionProcess) {
+    const resolvedInspection = incomingInspectionProcess;
+
+    // filter the data of STatus != done
+    const filteredInspection = resolvedInspection.data.filter((row) => {
+      const status = row.items.find(
+        (item) => item.key === "INSPECTION-STATUS",
+      )?.value;
+      return status?.toLowerCase() !== "done";
+    });
+    response.push({
+      incomingInspectionProcess: {
+        totalFiltered: filteredInspection.length,
+        data: filteredInspection,
+      },
+    });
+  }
+
+  // customerComplientRegisterProcess
+  if (customerComplientRegisterProcess) {
+    const resolvedCustomer = customerComplientRegisterProcess;
+
+    // supplied qty , failed qty = f QTY/ s QTY month vise year vise.
+    const filteredCustomer = resolvedCustomer.data.map((row) => {
+      const suppliedQty = row.items.find(
+        (item) => item.key === "SUPPLIED QTY",
+      )?.value;
+      const failedQty = row.items.find(
+        (item) => item.key === "FAILED QTY",
+      )?.value;
+      const date = row.items.find((item) => item.key === "DATE")?.value;
+      return { ratio: suppliedQty ? failedQty / suppliedQty : 0, date };
+    });
+    response.push({
+      customerComplientRegisterProcess: {
+        totalFiltered: filteredCustomer.length,
+        data: filteredCustomer,
+      },
+    });
+  }
+
+  // customerListProcess
+  if (customerListProcess) {
+    // total record count. filter by sales Person & Location (pass-all when not provided)
+    const resolvedCustomer = customerListProcess;
+    const filteredCustomer = resolvedCustomer.data.filter((row) => {
+      const salesPersonValue = row.items.find(
+        (item) => item.key === "SALES PERSON",
+      )?.value;
+      const locationValue = row.items.find(
+        (item) => item.key === "LOCATION",
+      )?.value;
+      // Handle empty string or null as 'no filter'
+      const matchSales =
+        !salesPerson ||
+        salesPerson === "" ||
+        salesPersonValue?.toLowerCase() === salesPerson.toLowerCase();
+      const matchLocation =
+        !location ||
+        location === "" ||
+        locationValue?.toLowerCase() === location.toLowerCase();
+      return matchSales && matchLocation;
+    });
+    response.push({
+      customerListProcess: {
+        totalFiltered: filteredCustomer.length,
+        data: filteredCustomer,
+      },
+    });
+  }
+
+  // quotationListProcess
+  if (quotationListProcess) {
+    // count of waiting for quote, waiting for order
+    const resolvedQuotation = quotationListProcess;
+    const filteredQuotation = resolvedQuotation.data.filter((row) => {
+      const status = row.items
+        .find((item) => item.key === "STATUS")
+        ?.value?.toLowerCase();
+      return status === "waiting for quote" || status === "waiting for order";
+    });
+    response.push({
+      quotationListProcess: {
+        totalFiltered: filteredQuotation.length,
+        data: filteredQuotation,
+      },
+    });
+  }
+
+  // orderListProcess
+  if (orderListProcess) {
+    // filter != closed status
+    const resolvedOrder = orderListProcess;
+    const filteredOrder = resolvedOrder.data.filter((row) => {
+      const status = row.items.find((item) => item.key === "STATUS")?.value;
+      return status?.toLowerCase() !== "closed";
+    });
+    response.push({
+      orderListProcess: {
+        totalFiltered: filteredOrder.length,
+        data: filteredOrder,
+      },
+    });
+  }
+
+  // procurementProcess
+  if (procurementProcess) {
+    const resolvedProcurement = procurementProcess;
+    // return pending qty and return data of payment pending
+    const filteredProcurement = resolvedProcurement.data.map((row) => {
+      const paymentStatus = row.items.find(
+        (item) => item.key === "PR STATUS",
+      )?.value;
+      const pendingQty = row.items.find((item) => item.key === "QTY")?.value;
+      return { paymentStatus, pendingQty };
+    });
+
+    response.push({
+      procurementProcess: {
+        totalFiltered: filteredProcurement.length,
+        data: filteredProcurement,
+      },
+    });
+  }
+
+  // stockDataProcess
+  if (stockDataProcess) {
+    // filter the data of ITEM CATEGORY === 'FINISHED GOOD'
+    const resolvedStock = stockDataProcess;
+    const filteredStock = resolvedStock.data.filter((row) => {
+      const itemCategory = row.items.find(
+        (item) => item.key === "ITEM CATEGORY",
+      )?.value;
+      return (
+        itemCategory?.toLowerCase() === "finished good" ||
+        itemCategory?.toLowerCase() === "finsihed good"
+      );
+    });
+
+    response.push({
+      stockDataProcess: {
+        totalFiltered: filteredStock.length,
+        data: filteredStock,
+      },
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: response,
   });
 });

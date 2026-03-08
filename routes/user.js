@@ -19,7 +19,7 @@ router.route("/login").post(loginUser);
 router.route("/logout").get(logoutUser);
 router.route("/forgotpassword").post(forgotPassword);
 router.route("/resetpassword/:token").put(resetPassword);
-router.route("/delete").delete(deleteUser);
+router.route("/delete").delete(isAuthenticatedUser, deleteUser);
 
 
 module.exports = router;
