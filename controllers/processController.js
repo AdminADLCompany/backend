@@ -891,9 +891,20 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
     // only Pending Details need to be displayed.
     const pendingDetails = productionPlanProcess.data.filter((row) => {
       return (
+        row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !==
+          "completed" &&
         row.items
-          .find((item) => item.key === "STATUS")
-          ?.value?.toLowerCase() === "pending"
+          .find((item) => item.key === "INCOMING INSPECTION")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "MACHINE")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "ASSEMBLY")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "OUT PROCESS")
+          ?.value?.toLowerCase() !== "completed"
       );
     });
     // plan qty(y-axis) need to display based on part no(x-axis)
@@ -910,6 +921,14 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
       productionPlanProcess: {
         pendingDetails: pendingDetails,
         reportGraph: reportGraph,
+        totalPlanQty: productionPlanProcess.data.reduce((acc, row) => {
+          return (
+            acc +
+              Number(
+                row.items.find((item) => item.key === "PLAN QTY")?.value,
+              ) || 0
+          );
+        }, 0),
       },
     });
   }
@@ -1011,19 +1030,69 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
   // dispatchProcess
   if (dispatchProcess) {
     const resolvedDispatch = dispatchProcess;
-    // pass the entire data count and data's PART-NO and DATE
-    const data = resolvedDispatch.data.map((row) => {
+
+    const filteredRows = resolvedDispatch.data.filter((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+
+      const epochMs = Number(dateItem.value);
+      if (isNaN(epochMs)) return false;
+
+      if (epochMs < effectiveStart) return false;
+      if (epochMs > effectiveEnd) return false;
+      return true;
+    });
+
+    const data = filteredRows.map((row) => {
       return {
         partNo:
-          row.items.find((item) => item.key === "PART NO")?.value || "N/A",
+          row.items.find((item) => item.key === "PART-NO")?.value || "N/A",
+        qty: Number(row.items.find((item) => item.key === "QTY")?.value) || 0,
         date: row.items.find((item) => item.key === "DATE")?.value || null,
       };
     });
 
+    // Aggregate month-wise and year-wise QTY
+    const monthMap = {};
+    const yearMap = {};
+
+    filteredRows.forEach((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      const epochMs = Number(dateItem.value);
+      const qty =
+        Number(row.items.find((item) => item.key === "QTY")?.value) || 0;
+      const d = new Date(epochMs);
+
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const monthKey = `${year}-${month}`;
+
+      monthMap[monthKey] = (monthMap[monthKey] || 0) + qty;
+      yearMap[year] = (yearMap[year] || 0) + qty;
+    });
+
+    const monthWise = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, qty]) => ({ label, qty }));
+
+    const yearWise = Object.entries(yearMap)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([label, qty]) => ({ label: String(label), qty }));
+
     response.push({
       dispatchProcess: {
-        totalFiltered: resolvedDispatch.data.length,
+        totalFiltered: filteredRows.length,
         data: data,
+        totalQuantity: filteredRows.reduce((acc, row) => {
+          return (
+            acc +
+            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
+          );
+        }, 0),
+        graphChart: {
+          monthWise,
+          yearWise,
+        },
       },
     });
   }
@@ -1213,7 +1282,7 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
     const resolvedQuotation = quotationListProcess;
     const filteredQuotation = resolvedQuotation.data.filter((row) => {
       const status = row.items
-        .find((item) => item.key === "STATUS")
+        .find((item) => item.key === "QL STATUS")
         ?.value?.toLowerCase();
       return status === "waiting for quote" || status === "waiting for order";
     });
@@ -1237,6 +1306,12 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
       orderListProcess: {
         totalFiltered: filteredOrder.length,
         data: filteredOrder,
+        totalOrderQty: filteredOrder.reduce((acc, row) => {
+          return (
+            acc +
+            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
+          );
+        }, 0),
       },
     });
   }
@@ -1245,18 +1320,21 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
   if (procurementProcess) {
     const resolvedProcurement = procurementProcess;
     // return pending qty and return data of payment pending
-    const filteredProcurement = resolvedProcurement.data.map((row) => {
-      const paymentStatus = row.items.find(
-        (item) => item.key === "PR STATUS",
-      )?.value;
-      const pendingQty = row.items.find((item) => item.key === "QTY")?.value;
-      return { paymentStatus, pendingQty };
+    const filteredProcurement = resolvedProcurement.data.filter((row) => {
+      const status = row.items.find((item) => item.key === "PR STATUS")?.value;
+      return status?.toLowerCase() === "pending";
     });
 
     response.push({
       procurementProcess: {
         totalFiltered: filteredProcurement.length,
         data: filteredProcurement,
+        totalPendingQty: filteredProcurement.reduce((acc, row) => {
+          return (
+            acc +
+            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
+          );
+        }, 0),
       },
     });
   }
@@ -1279,6 +1357,12 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
       stockDataProcess: {
         totalFiltered: filteredStock.length,
         data: filteredStock,
+        totalStockQty: filteredStock.reduce((acc, row) => {
+          return (
+            acc +
+            (Number(row.items.find((item) => item.key === "STOCK")?.value) || 0)
+          );
+        }, 0),
       },
     });
   }
