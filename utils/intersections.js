@@ -135,7 +135,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               process: "processId",
             },
             { key: "VERIFIED BY", value: verifiedBy, process: "value" },
-            { key: "RR STATUS", value: status, process: "value" },
+            { key: "RR STATUS", value: "", process: "select" },
           ],
           rowDataId,
         };
@@ -1493,10 +1493,8 @@ exports.handleUpdateIntersection = async (
                 },
                 {
                   key: "RR STATUS",
-                  value:
-                    items.find((i) => i.key === "ACTION PLAN STATUS")?.value ||
-                    "",
-                  process: "value",
+                  value: "",
+                  process: "select",
                 },
               ],
               rowDataId: row.rowDataId,
