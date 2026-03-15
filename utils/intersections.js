@@ -772,7 +772,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       // Save both processes only if check passes
       await storeRegisterProcess.save();
       if (stockDataProcess) await stockDataProcess.save();
-    } else if (process.processId === "MS/R/006A") {
+    } 
+    
+    else if (process.processId === "MS/R/006A") {
       const itemListProcess = await Process.findOne({
         processId: "PR/R/002",
       });
@@ -1143,6 +1145,11 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
             },
             {
               key: "QTY",
+              value: items.find((i) => i.key === "QTY")?.value,
+              process: "value",
+            },
+            {
+              key: "PENDING QTY",
               value: items.find((i) => i.key === "QTY")?.value,
               process: "value",
             },
@@ -1576,6 +1583,11 @@ exports.handleUpdateIntersection = async (
               },
               {
                 key: "QTY",
+                value: items.find((i) => i.key === "QTY")?.value,
+                process: "value",
+              },
+              {
+                key: "PENDING QTY",
                 value: items.find((i) => i.key === "QTY")?.value,
                 process: "value",
               },
@@ -2628,6 +2640,50 @@ exports.handleDeleteIntersection = async (
     // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
     else if (process.processId === "PR/R/003") {
       await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
+    }
+
+    // ---- MS/R/006 → MS/R/006A ----
+    else if (process.processId === "MS/R/006") {
+      await deleteLinkedRows("MS/R/006A", (row) => row.rowDataId === rowId);
+    }
+
+    // ---- MS/R/006A → MS/R/006 ----
+    else if (process.processId === "MS/R/006A") {
+      const orderProcess = await Process.findOne({ processId: "MS/R/006" });
+      const sourceRowId = currentRow.rowDataId;
+      if (orderProcess && sourceRowId) {
+        const orderRow = orderProcess.data.find(
+          (r) => r._id.toString() === sourceRowId.toString(),
+        );
+        if (orderRow) {
+          // Sum remaining dockets (subtracting the one being deleted)
+          let totalDeliveryQty = process.data.reduce((sum, r) => {
+            if (
+              r._id.toString() !== rowId.toString() &&
+              r.rowDataId &&
+              r.rowDataId.toString() === sourceRowId.toString()
+            ) {
+              const qty = r.items.find((item) => item.key === "DELIVERY QTY")?.value;
+              return sum + Number(qty || 0);
+            }
+            return sum;
+          }, 0);
+
+          const orderQty = Number(
+            orderRow.items.find((item) => item.key === "QTY")?.value || 0,
+          );
+          const pendingQty = orderQty - totalDeliveryQty;
+
+          const orderPendingQtyItem = orderRow.items.find(
+            (item) => item.key === "PENDING QTY",
+          );
+          if (orderPendingQtyItem) {
+            orderPendingQtyItem.value = String(pendingQty);
+          }
+          orderProcess.markModified("data");
+          await orderProcess.save();
+        }
+      }
     }
     return { success: true };
   } catch (error) {

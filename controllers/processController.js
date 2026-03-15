@@ -299,19 +299,63 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         qlStatusItem.value =
           quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
       }
-    } else if (process.processId === "MS/R/006A") {
+    } 
+    // ---- MS/R/006A → MS/R/006 ---- Order List -> Quotation list
+    else if (process.processId === "MS/R/006A") {
       const orderProcess = await Process.findOne({
         processId: "MS/R/006",
       });
-      const orderRow = orderProcess.data.find(
-        (row) => row._id.toString() === rowDataId.toString(),
-      );
-      const qty = orderRow.items.find((item) => item.key === "QTY")?.value;
 
-      const deliveryQty = items.find((i) => i.key === "DELIVERY QTY")?.value;
-      const pendingQty = items.find((i) => i.key === "PENDING QTY");
-      if (pendingQty)
-        pendingQty.value = String(Number(qty) - Number(deliveryQty));
+      if (orderProcess) {
+        const orderRow = orderProcess.data.find(
+          (row) => row._id.toString() === rowDataId.toString(),
+        );
+
+        if (orderRow) {
+          // Sum of all existing DELIVERY QTY of this particular order row's id
+          let totalDeliveryQty = process.data.reduce((sum, row) => {
+            if (row.rowDataId && row.rowDataId.toString() === rowDataId.toString()) {
+              const qty = row.items.find((item) => item.key === "DELIVERY QTY")?.value;
+              return sum + Number(qty || 0);
+            }
+            return sum;
+          }, 0);
+
+          // Add current row's delivery qty
+          const currentDeliveryQty = Number(items.find((i) => i.key === "DELIVERY QTY")?.value || 0);
+          totalDeliveryQty += currentDeliveryQty;
+
+          // current row order qty's PENDING QTY === QTY - total delivery qty.
+          const orderQty = Number(orderRow.items.find((item) => item.key === "QTY")?.value || 0);
+          const pendingQty = orderQty - totalDeliveryQty;
+
+          const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
+          if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
+
+          // update orderRow's PENDING QTY
+          const orderPendingQtyItem = orderRow.items.find((item) => item.key === "PENDING QTY");
+          if (orderPendingQtyItem) {
+            orderPendingQtyItem.value = String(pendingQty);
+          } else {
+            orderRow.items.push({ key: "PENDING QTY", value: String(pendingQty), process: "value" });
+          }
+
+          const customerName = orderRow.items.find((item) => item.key === "CUSTOMER NAME")?.value;
+          const partNo = orderRow.items.find((item) => item.key === "PART NO")?.value;
+          const poNo = orderRow.items.find((item) => item.key === "PO NO")?.value;
+
+          const name = items.find((i) => i.key === "CUSTOMER NAME");
+          const part = items.find((i) => i.key === "PART NO");
+          const PO = items.find((i) => i.key === "PO NO");
+
+          if (name) name.value = customerName || "";
+          if (part) part.value = partNo || "";
+          if (PO) PO.value = poNo || "";
+
+          orderProcess.markModified("data");
+          await orderProcess.save();
+        }
+      }
     }
 
     // ---------------- DD/R/002 () ----------------
@@ -528,14 +572,76 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     }
   }
 
-   else if (process.processId === "DD/R/007") {
+  else if (process.processId === "DD/R/007") {
       // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
       const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
       const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
       const successRate = items.find((i) => i.key === "SUCCESS RATE");
       if (successRate)
         successRate.value = String((Number(qtyReturned) / Number(qtySold)) * 100);
+  }
+
+  else if (process.processId === "MS/R/006A") {
+    const orderProcess = await Process.findOne({
+      processId: "MS/R/006",
+    });
+
+    const sourceRowId = row.rowDataId;
+    if (orderProcess && sourceRowId) {
+      const orderRow = orderProcess.data.find(
+        (r) => r._id.toString() === sourceRowId.toString(),
+      );
+
+      if (orderRow) {
+        // Sum of all DELIVERY QTY for this order except current row
+        let totalDeliveryQty = process.data.reduce((sum, r) => {
+          if (
+            r._id.toString() !== rowId.toString() &&
+            r.rowDataId &&
+            r.rowDataId.toString() === sourceRowId.toString()
+          ) {
+            const qty = r.items.find((item) => item.key === "DELIVERY QTY")?.value;
+            return sum + Number(qty || 0);
+          }
+          return sum;
+        }, 0);
+
+        // Add current updated delivery qty
+        const currentDeliveryQty = Number(items.find((i) => i.key === "DELIVERY QTY")?.value || 0);
+        totalDeliveryQty += currentDeliveryQty;
+
+        // current row order qty's PENDING QTY === QTY - total delivery qty
+        const orderQty = Number(orderRow.items.find((item) => item.key === "QTY")?.value || 0);
+        const pendingQty = orderQty - totalDeliveryQty;
+
+        const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
+        if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
+
+        // update orderRow's PENDING QTY
+        const orderPendingQtyItem = orderRow.items.find((item) => item.key === "PENDING QTY");
+        if (orderPendingQtyItem) {
+          orderPendingQtyItem.value = String(pendingQty);
+        } else {
+          orderRow.items.push({ key: "PENDING QTY", value: String(pendingQty), process: "value" });
+        }
+
+        const customerName = orderRow.items.find((item) => item.key === "CUSTOMER NAME")?.value;
+        const partNo = orderRow.items.find((item) => item.key === "PART NO")?.value;
+        const poNo = orderRow.items.find((item) => item.key === "PO NO")?.value;
+
+        const name = items.find((i) => i.key === "CUSTOMER NAME");
+        const part = items.find((i) => i.key === "PART NO");
+        const PO = items.find((i) => i.key === "PO NO");
+
+        if (name) name.value = customerName || "";
+        if (part) part.value = partNo || "";
+        if (PO) PO.value = poNo || "";
+
+        orderProcess.markModified("data");
+        await orderProcess.save();
+      }
     }
+  }
 
   // Update row data
   const previousItems = row.items;
