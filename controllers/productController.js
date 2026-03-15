@@ -1,9 +1,9 @@
-const Product = require('../models/product');
+const Product = require("../models/product");
 
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 
-exports.getAllProducts = catchAsyncErrors( async (req, res, next) => {
+exports.getAllProducts = catchAsyncErrors(async (req, res, next) => {
   const products = await Product.find();
 
   await Product.populate(products, { path: "updatedBy", select: "name email" });
@@ -11,11 +11,11 @@ exports.getAllProducts = catchAsyncErrors( async (req, res, next) => {
   res.status(200).json({
     success: true,
     count: products.length,
-    data: products
+    data: products,
   });
 });
 
-exports.getProductById = catchAsyncErrors( async (req, res, next) => {
+exports.getProductById = catchAsyncErrors(async (req, res, next) => {
   const product = await Product.findById(req.params.id);
 
   await Product.populate(product, { path: "updatedBy", select: "name email" });
@@ -25,22 +25,49 @@ exports.getProductById = catchAsyncErrors( async (req, res, next) => {
   }
   res.status(200).json({
     success: true,
-    data: product
+    data: product,
   });
 });
 
 exports.createProduct = catchAsyncErrors(async (req, res, next) => {
   const {
-    name, description, status, partNo, series, image,
-    portSize, bodySize, material, standard,
-    operatingPressure, pressureDrop, ratedFlow,
-    sealingMaterial, suggestedFlow, temperature, graph
+    name,
+    description,
+    status,
+    partNo,
+    series,
+    image,
+    portSize,
+    bodySize,
+    material,
+    standard,
+    operatingPressure,
+    pressureDrop,
+    ratedFlow,
+    sealingMaterial,
+    suggestedFlow,
+    temperature,
+    graph,
   } = req.body;
 
-  if (!name || !description || !partNo || !series || !image ||
-      !portSize || !bodySize || !material || !standard ||
-      !operatingPressure || !pressureDrop || !ratedFlow ||
-      !sealingMaterial || !suggestedFlow || !temperature || !graph) {
+  if (
+    !name ||
+    !description ||
+    !partNo ||
+    !series ||
+    !image ||
+    !portSize ||
+    !bodySize ||
+    !material ||
+    !standard ||
+    !operatingPressure ||
+    !pressureDrop ||
+    !ratedFlow ||
+    !sealingMaterial ||
+    !suggestedFlow ||
+    !temperature ||
+    !graph
+  ) {
     return next(new ErrorHandler("Please fill all fields", 400));
   }
 
@@ -62,7 +89,7 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
     suggestedFlow,
     temperature,
     graph,
-    updatedBy: req.user._id  // ✅ only ObjectId
+    updatedBy: req.user._id, // ✅ only ObjectId
   });
 
   // Populate user details before sending response
@@ -70,46 +97,44 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
 
   res.status(201).json({
     success: true,
-    data: product
+    data: product,
   });
 });
 
-
 exports.updateProduct = catchAsyncErrors(async (req, res, next) => {
-    const updates = {
-        ...req.body,
-        updatedBy: req.user._id,   // <-- store user
-        updatedAt: Date.now()      // <-- refresh timestamp
-    };
+  const updates = {
+    ...req.body,
+    updatedBy: req.user._id, // <-- store user
+    updatedAt: Date.now(), // <-- refresh timestamp
+  };
 
-    const product = await Product.findByIdAndUpdate(req.params.id, updates, {
-        new: true
-    }).populate("updatedBy", "name email");
+  const product = await Product.findByIdAndUpdate(req.params.id, updates, {
+    new: true,
+  }).populate("updatedBy", "name email");
 
-    if (!product) {
-        return next(new ErrorHandler("Product not found", 404));
-    }
+  if (!product) {
+    return next(new ErrorHandler("Product not found", 404));
+  }
 
-    res.status(200).json({
-        success: true,
-        data: product
-    });
+  res.status(200).json({
+    success: true,
+    data: product,
+  });
 });
 
-exports.deleteProduct = catchAsyncErrors( async (req, res, next) => {
-  
-    const product = await Product.findByIdAndDelete(req.params.id);
+exports.deleteProduct = catchAsyncErrors(async (req, res, next) => {
+  const product = await Product.findByIdAndDelete(req.params.id);
 
-    await Product.populate(product, { path: "updatedBy", select: "name email" });
+  await Product.populate(product, { path: "updatedBy", select: "name email" });
 
-    if (!product) {
-        return next(new ErrorHandler("Product not found", 404));
-    }
-        
-    res.status(200).json({
-        success: true,
-        data: product
-    });
+  if (!product) {
+    return next(new ErrorHandler("Product not found", 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: product,
+  });
 });
 
 exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
@@ -124,9 +149,9 @@ exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
     {
       graph,
       updatedAt: Date.now(),
-      updatedBy: req.user._id
+      updatedBy: req.user._id,
     },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   ).populate("updatedBy", "name email");
 
   if (!product) {
@@ -136,6 +161,6 @@ exports.addGraphData = catchAsyncErrors(async (req, res, next) => {
   res.status(200).json({
     success: true,
     message: "Graph data added successfully",
-    data: product
+    data: product,
   });
 });

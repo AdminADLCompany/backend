@@ -21,6 +21,14 @@ const {
   getProductDetails,
   deleteAllProcessData,
   getMainDashBoardDetails,
+  getNPDDashboardDetails,
+  getProductDashboard,
+  getRevisionControlDashboard,
+  getOEEDashboard,
+  getDashboardProductReport,
+  getInhouseDashboard,
+  getCustomerQualityDashboard,
+  getIncomingInspectionDashboard,
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -30,6 +38,15 @@ router
   .post(getMainDashBoardDetails);
 router.route("/all").get(isAuthenticatedUser, getAllProcesses);
 router.route("/search").get(isAuthenticatedUser, getProductDetails);
+
+router.route('/design/npdRegister').get(getNPDDashboardDetails);
+router.route('/design/productsDashboard').get(getProductDashboard);
+router.route('/design/revisionControl').get(getRevisionControlDashboard);
+router.route('/manufacturing/oeeDashboard').get(getOEEDashboard);
+router.route('/manufacturing/productionReportDashboard').get(getDashboardProductReport);
+router.route('/manufacturing/inhouseDashboard').get(getInhouseDashboard);
+router.route('/quality/customercomplientRegister').get(getCustomerQualityDashboard);
+router.route('/quality/incomingInspection').get(getIncomingInspectionDashboard);
 
 router.route("/create").post(isAuthenticatedUser, createProcess);
 router

@@ -1,4 +1,4 @@
-// utils/intersection.js
+const mongoose = require("mongoose");
 const Process = require("../models/process");
 const History = require("../models/history");
 
@@ -161,7 +161,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       }
     }
 
-    // ---- PR/R/003A → QA/R/003A ---- Procurement → Inspection
+    // ---- PR/R/003A → QA/R/003 ---- Procurement → Inward -> Inspection
     else if (process.processId === "PR/R/003A") {
       const inspectionProcess = await Process.findOne({
         processId: "QA/R/003",
@@ -197,6 +197,8 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         (i) => i.key === "QC QUALITY INSPECTION",
       )?.value;
       if (isMoving !== "Move to Inspection") return { success: true };
+
+      const newInwardRowId = new mongoose.Types.ObjectId();
 
       const inspectionRow = {
         items: [
@@ -267,13 +269,15 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           },
           { key: "INSPECTION-STATUS", value: "", process: "select" },
         ],
-        rowDataId,
+        rowDataId: newInwardRowId.toString(),
       };
 
       inspectionRow.items = await linkProcessIdItems(inspectionRow.items);
       inspectionProcess.data.push(inspectionRow);
       inspectionProcess.updatedBy = userId;
       await inspectionProcess.save();
+
+      return { success: true, newRowId: newInwardRowId };
     }
 
     // ---- MR/R/001 → PR/R/003 ---- Production Plan → Procurement Register
@@ -374,6 +378,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               { key: "ITEM NAME", value: b["ITEM-NAME"] },
               { key: "GRADE", value: b["GRADE"] },
               { key: "QTY", value: totalQty.toString() },
+              { key: "PENDING QTY", value: totalQty.toString() },
               { key: "UNITS", value: b["UNITS"] },
               { key: "VENDOR NAME", value: "" },
               { key: "VALUE", value: "" },
@@ -649,12 +654,16 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         return rowItemCode === items.find((i) => i.key === "PART NO")?.value;
       });
 
-      if (!matchedRow || !storeRegisterProcess)
+      if (!storeRegisterProcess)
         return {
           success: false,
-          message: "Item not found in Store Register Process (ST/R/005)",
+          message: "Store Register Process not found",
           statusCode: 404,
         };
+
+      if (!matchedRow){
+        return { success: true, message: "Item not found in Store Register Process (ST/R/005)", statusCode: 404 };
+      }
 
       const storeRegisterRow = {
         items: [
@@ -1865,6 +1874,7 @@ exports.handleUpdateIntersection = async (
               { key: "ITEM NAME", value: b["ITEM-NAME"] },
               { key: "GRADE", value: b["GRADE"] },
               { key: "QTY", value: totalQty.toString() },
+              { key: "PENDING QTY", value: totalQty.toString() },
               { key: "UNITS", value: b["UNITS"] },
               { key: "VENDOR NAME", value: "" },
               { key: "VALUE", value: "" },
@@ -1888,6 +1898,7 @@ exports.handleUpdateIntersection = async (
     }
 
     // ---- PR/R/003A → PR/R/003 ----
+    // ---- PR/R/003A → PR/R/003 ----
     else if (process.processId === "PR/R/003A") {
       // 1️⃣ Get Procurement Register process
       const procurementProcess = await Process.findOne({
@@ -1895,40 +1906,54 @@ exports.handleUpdateIntersection = async (
       });
       if (!procurementProcess) return { success: true };
 
-      // 2️⃣ Filter inward rows linked to the current rowDataId
+      // 2️⃣ Filter inward rows linked to the current rowDataId (Procurement row _id)
       const matchRows = process.data.filter(
         (r) => r.rowDataId === row.rowDataId,
       );
       if (matchRows.length === 0) return { success: true };
 
-      // 3️⃣ Check if ALL related inward rows have QC QUALITY INSPECTION = "Inspection Done"
-      const allInspectionDone = matchRows.every(
-        (row) =>
-          row.items.find((i) => i.key === "QC QUALITY INSPECTION")?.value ===
-          "Inspection Done",
+      // 3️⃣ Sum DELIVERY QTY and DEFECT QTY from matchRows
+      let totalDeliveryQty = 0;
+      let totalDefectQty = 0;
+
+      matchRows.forEach((inRow) => {
+        const delQty = Number(inRow.items.find((i) => i.key === "QTY")?.value || 0);
+        const defQty = Number(inRow.items.find((i) => i.key === "DEFECT QTY")?.value || 0);
+        totalDeliveryQty += delQty;
+        totalDefectQty += defQty;
+      });
+
+      const netReceived = totalDeliveryQty - totalDefectQty;
+
+      // 4️⃣ Find the corresponding procurement row and update PENDING QTY
+      const prRow = procurementProcess.data.find(
+        (r) => r._id.toString() === row.rowDataId.toString(),
       );
 
-      // 4️⃣ If inspection done, find the corresponding procurement row and update status
-      if (allInspectionDone) {
-        const inwardRow = matchRows[0];
+      if (prRow) {
+        const prQty = Number(prRow.items.find((i) => i.key === "QTY")?.value || 0);
+        const pendingQty = prQty - netReceived;
 
-        const prRow = procurementProcess.data.find(
-          (r) => r._id.toString() === inwardRow.rowDataId.toString(),
-        );
-
-        if (prRow) {
-          const prStatusItem = prRow.items.find((i) => i.key === "PR STATUS");
-          if (prStatusItem) {
-            prStatusItem.value = "Closed";
-            await procurementProcess.save();
-          }
+        const prPendingQtyItem = prRow.items.find((i) => i.key === "PENDING QTY");
+        if (prPendingQtyItem) {
+          prPendingQtyItem.value = String(pendingQty);
+        } else {
+          prRow.items.push({
+            key: "PENDING QTY",
+            value: String(pendingQty),
+            process: "value",
+          });
         }
+        
+        procurementProcess.markModified("data");
+        await procurementProcess.save();
       }
     }
 
     // ---- PR/R/003A → QA/R/003 ---- Inward -> Incoming Inspection ---
     else if (process.processId === "QA/R/003") {
       const inwardProcess = await Process.findOne({ processId: "PR/R/003A" });
+      const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
       const storeRegisterProcess = await Process.findOne({
         processId: "ST/R/005",
       });
@@ -1949,7 +1974,11 @@ exports.handleUpdateIntersection = async (
         if (!matchQulaityInspection) return { success: true };
 
         let currentInwardRow = inwardProcess.data.find(
-          (r) => r.rowDataId === row.rowDataId.toString(),
+          (r) => r._id.toString() === row.rowDataId.toString(),
+        );
+
+        const procumentMatchRow = procurementProcess.data.find(
+          (r) => r._id.toString() === currentInwardRow?.rowDataId.toString(),
         );
 
         const inwardRow = {
@@ -1958,6 +1987,27 @@ exports.handleUpdateIntersection = async (
               key: "INVOICE NO",
               value:
                 currentInwardRow?.items.find((i) => i.key === "INVOICE NO")
+                  ?.value || "",
+              process: "value",
+            },
+            {
+              key: "PO NO",
+              value:
+                currentInwardRow?.items.find((i) => i.key === "PO NO")
+                  ?.value || "",
+              process: "value",
+            },
+            {
+              key: "VENDOR NAME",
+              value:
+                currentInwardRow?.items.find((i) => i.key === "VENDOR NAME")
+                  ?.value || "",
+              process: "value",
+            },
+            {
+              key: "ITEM NAME",
+              value:
+                currentInwardRow?.items.find((i) => i.key === "ITEM NAME")
                   ?.value || "",
               process: "value",
             },
@@ -1988,17 +2038,17 @@ exports.handleUpdateIntersection = async (
               process: "value",
             },
             {
-              key: "PENDING QTY",
-              value: (
-                Number(
-                  currentInwardRow?.items.find((i) => i.key === "QTY")?.value,
-                ) -
-                Number(
-                  matchQulaityInspection.items.find(
-                    (i) => i.key === "DEFECT QUANTITY",
-                  )?.value,
-                )
-              ).toString(),
+              key: "VALUE",
+              value: currentInwardRow.items.find(
+                (i) => i.key === "VALUE",
+              )?.value,
+              process: "value",
+            },
+            {
+              key: "CREDIT PERIOD",
+              value: currentInwardRow.items.find(
+                (i) => i.key === "CREDIT PERIOD",
+              )?.value,
               process: "value",
             },
             {
@@ -2013,6 +2063,46 @@ exports.handleUpdateIntersection = async (
         };
         inwardProcess.data.id(currentInwardRow._id).items = inwardRow.items;
         inwardProcess.updatedBy = userId;
+
+        if (procumentMatchRow) {
+          const netReceived = inwardProcess.data.reduce((sum, inRow) => {
+            const isInspectionDone = inRow.items.find((i) => i.key === "QC QUALITY INSPECTION")?.value === "Inspection Done";
+            if (
+              inRow.rowDataId &&
+              inRow.rowDataId.toString() === procumentMatchRow._id.toString() &&
+              isInspectionDone
+            ) {
+              const qty = Number(
+                inRow.items.find((i) => i.key === "QTY")?.value || 0,
+              );
+              const defect = Number(
+                inRow.items.find((i) => i.key === "DEFECT QTY")?.value || 0,
+              );
+              return sum + (qty - defect);
+            }
+            return sum;
+          }, 0);
+
+          const procQty = Number(
+            procumentMatchRow.items.find((i) => i.key === "QTY")?.value || 0,
+          );
+          const pendingQty = procQty - netReceived;
+
+          const prPendingQtyItem = procumentMatchRow.items.find(
+            (i) => i.key === "PENDING QTY",
+          );
+          if (prPendingQtyItem) {
+            prPendingQtyItem.value = String(pendingQty);
+          } else {
+            procumentMatchRow.items.push({
+              key: "PENDING QTY",
+              value: String(pendingQty),
+              process: "value",
+            });
+          }
+          procurementProcess.markModified("data");
+          await procurementProcess.save();
+        }
 
         // Update Store Register
         if (storeRegisterProcess) {
@@ -2640,6 +2730,11 @@ exports.handleDeleteIntersection = async (
     // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
     else if (process.processId === "PR/R/003") {
       await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
+    }
+
+    // ---- PR/R/003A → QA/R/003 ----
+    else if (process.processId === "PR/R/003A") {
+      await deleteLinkedRows("QA/R/003", (row) => row.rowDataId === rowId);
     }
 
     // ---- MS/R/006 → MS/R/006A ----
