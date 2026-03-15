@@ -347,6 +347,14 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
           matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? "";
     }
 
+    else if (process.processId === "DD/R/007") {
+      // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
+      const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
+      const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
+      const successRate = items.find((i) => i.key === "SUCCESS RATE");
+      if (successRate)
+        successRate.value = String((Number(qtyReturned) / Number(qtySold)) * 100);
+    }
     // ---------------- Save New Row ----------------
     const newRow = { items, rowDataId };
     process.data.push(newRow);
@@ -453,7 +461,9 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         workingTime) *
       100;
     oeeItem.value = Math.floor(OEE);
-  } else if (process.processId === "DD/R/010") {
+  } 
+  
+  else if (process.processId === "DD/R/010") {
     // Sync process statuses from DD/R/012 (Detailed NPD Checklist)
     const d12Process = await Process.findOne({ processId: "DD/R/012" });
     if (d12Process) {
@@ -517,6 +527,15 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
       }
     }
   }
+
+   else if (process.processId === "DD/R/007") {
+      // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
+      const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
+      const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
+      const successRate = items.find((i) => i.key === "SUCCESS RATE");
+      if (successRate)
+        successRate.value = String((Number(qtyReturned) / Number(qtySold)) * 100);
+    }
 
   // Update row data
   const previousItems = row.items;
@@ -687,12 +706,14 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   const productionPlanProcess = await Process.findOne({
     processId: "MR/R/001",
   });
+  const employeeHistory = await Process.findOne({ processId: "HR/R/001" });
 
   if (
     !productsProcess ||
     !itemListProcess ||
     !vendorListProcess ||
-    !customerListProcess
+    !customerListProcess ||
+    !employeeHistory
   ) {
     return next(new ErrorHandler("Process not found", 404));
   }
@@ -716,6 +737,9 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
 
   // Use Sets to remove duplicates from production plan
   const planNumber = new Set();
+
+  // Use Sets to remove the duplciates from name
+  const employeeName = new Set();
 
   let groupOfItems = [];
   productsProcess.data.forEach((row) => {
@@ -798,6 +822,17 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     if (planNo && assembly !== "COMPLETED") planNumber.add(planNo);
   });
 
+  let groupOfEmployeeName = [];
+  employeeHistory.data.forEach((row) => {
+    const Name = row.items.find((i) => i.key === "NAME")?.value;
+    groupOfEmployeeName.push([
+      {
+        "GENERAL SHIFT": Name,
+      },
+    ]);
+    if (Name) employeeName.add(Name);
+  });
+
   const response = [
     { key: "PART-NO", value: Array.from(partNo) },
     { key: "PART-NAME", value: Array.from(partName) },
@@ -809,6 +844,10 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "CUSTOMER-NAME", value: Array.from(customerName) },
     { key: "ITEM_CODE", value: Array.from(itemCode) },
     { key: "PLAN-NO", value: Array.from(planNumber) },
+    { key: "GENERAL SHIFT", value: Array.from(employeeName) },
+    { key: "1 SHIFT", value: Array.from(employeeName) },
+    { key: "2 SHIFT", value: Array.from(employeeName) },
+    { key: "3 SHIFT", value: Array.from(employeeName) },
   ];
 
   res.status(200).json({
