@@ -1984,8 +1984,8 @@ exports.getIncomingInspectionDashboard = catchAsyncErrors(
         new ErrorHandler("Incoming Inspection Process (QA/R/003) not found", 404),
       );
     }
-
     const pendingCount = incomingInspectionProcess.data.filter((row) => {
+
       const status = row.items.find((i) => i.key === "INSPECTION-STATUS")?.value;
       return status?.toLowerCase() !== "done";
     }).length;
