@@ -1615,11 +1615,11 @@ exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
 
 // 2. Product Dashboard
 exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
-  const ProductsProcess = await Process.findOne({ processId: "PD/R/001" });
-  const BOMProcess = await Process.findOne({ processId: "PD/R/002" });
+  const ProductsProcess = await Process.findOne({ processId: "DD/R/001" });
+  const BOMProcess = await Process.findOne({ processId: "DD/R/002" });
 
   if (!ProductsProcess || !BOMProcess) {
-    return next(new ErrorHandler("Products Process or BOM Process not found", 404));
+    return next(new ErrorHandler("Product List (DD/R/001) or BOM (DD/R/002) Process not found", 404));
   }
 
   const uniqueProductParts = new Set();
@@ -1645,10 +1645,10 @@ exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
 
 // 3. Revision Control Dashboard
 exports.getRevisionControlDashboard = catchAsyncErrors(async (req, res, next) => {
-  const revisionControlProcess = await Process.findOne({ processId: "PD/R/003" });
+  const revisionControlProcess = await Process.findOne({ processId: "DD/R/005" });
 
   if (!revisionControlProcess) {
-    return next(new ErrorHandler("Revision Control Process (PD/R/003) not found", 404));
+    return next(new ErrorHandler("Revision Control Process (DD/R/005) not found", 404));
   }
 
   const filteredData = revisionControlProcess.data
@@ -1676,12 +1676,12 @@ exports.getRevisionControlDashboard = catchAsyncErrors(async (req, res, next) =>
 // 4. OEE Dashboard
 exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
   const productionReportProcess = await Process.findOne({
-    processId: "PD/R/005",
+    processId: "MR/R/002",
   });
 
   if (!productionReportProcess) {
     return next(
-      new ErrorHandler("Production Report Process (PD/R/005) not found", 404),
+      new ErrorHandler("Production Report Process (MR/R/002) not found", 404),
     );
   }
 
@@ -1732,12 +1732,12 @@ exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
 // 5. Production Report Dashboard
 exports.getDashboardProductReport = catchAsyncErrors(async (req, res, next) => {
   const productionReportProcess = await Process.findOne({
-    processId: "PD/R/005",
+    processId: "MR/R/002",
   });
 
   if (!productionReportProcess) {
     return next(
-      new ErrorHandler("Production Report Process (PD/R/005) not found", 404),
+      new ErrorHandler("Production Report Process (MR/R/002) not found", 404),
     );
   }
 
@@ -2390,9 +2390,9 @@ exports.getSalesPaymentAndDelivery = catchAsyncErrors(async (req, res, next) => 
 
 // 20. Sales Dashboard - Trail Status
 exports.getSalesTrailStatus = catchAsyncErrors(async (req, res, next) => {
-  const customerTrailProcess = await Process.findOne({ processId: "MS/R/003" });
+  const customerTrailProcess = await Process.findOne({ processId: "MS/R/001" });
   if (!customerTrailProcess) {
-    return next(new ErrorHandler("Customer Trail Process (MS/R/003) not found", 404));
+    return next(new ErrorHandler("Customer Trail Process (MS/R/001) not found", 404));
   }
   const trailStatus = {};
   customerTrailProcess.data.forEach((row) => {
