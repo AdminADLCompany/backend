@@ -2272,3 +2272,136 @@ exports.getInwardDashboard = catchAsyncErrors(async (req, res, next) => {
     },
   });
 });
+
+// 15. Sales Dashboard - Customer Count
+exports.getSalesCustomerCount = catchAsyncErrors(async (req, res, next) => {
+  const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
+  if (!customerListProcess) {
+    return next(new ErrorHandler("Customer List Process (MS/R/004) not found", 404));
+  }
+  res.status(200).json({
+    success: true,
+    data: { totalCustomers: customerListProcess.data.length },
+  });
+});
+
+// 16. Sales Dashboard - Sales Trend
+exports.getSalesTrend = catchAsyncErrors(async (req, res, next) => {
+  const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+  if (!orderListProcess) {
+    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
+  }
+  const { startDate, endDate } = req.query;
+  const effectiveStart = startDate ? Number(startDate) : 0;
+  const effectiveEnd = endDate ? Number(endDate) : Infinity;
+
+  const salesTrend = {};
+  orderListProcess.data.forEach((row) => {
+    const dateVal = row.items.find((i) => i.key === "DATE" || i.key === "ORDER DATE")?.value;
+    const value = parseFloat(row.items.find((i) => i.key === "VALUE")?.value || 0);
+    if (dateVal && !isNaN(value)) {
+      const date = new Date(Number(dateVal));
+      if (date.getTime() >= effectiveStart && date.getTime() <= effectiveEnd) {
+        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        salesTrend[monthYear] = (salesTrend[monthYear] || 0) + value;
+      }
+    }
+  });
+
+  res.status(200).json({
+    success: true,
+    data: Object.entries(salesTrend).map(([month, value]) => ({ month, value })),
+  });
+});
+
+// 17. Sales Dashboard - Quotation Status
+exports.getQuotationStatus = catchAsyncErrors(async (req, res, next) => {
+  const quotationListProcess = await Process.findOne({ processId: "MS/R/005" });
+  if (!quotationListProcess) {
+    return next(new ErrorHandler("Quotation List Process (MS/R/005) not found", 404));
+  }
+  const quotationStatus = {};
+  quotationListProcess.data.forEach((row) => {
+    const status = row.items.find((i) => i.key === "QL STATUS")?.value || "UNKNOWN";
+    quotationStatus[status] = (quotationStatus[status] || 0) + 1;
+  });
+  res.status(200).json({
+    success: true,
+    data: quotationStatus,
+  });
+});
+
+// 18. Sales Dashboard - Order Details
+exports.getSalesOrderDetails = catchAsyncErrors(async (req, res, next) => {
+  const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+  if (!orderListProcess) {
+    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
+  }
+  let totalOrderQty = 0;
+  let totalPendingQty = 0;
+  orderListProcess.data.forEach((row) => {
+    const qty = parseFloat(row.items.find((i) => i.key === "QTY")?.value || 0);
+    const pendingQty = parseFloat(row.items.find((i) => i.key === "PENDING QTY")?.value || 0);
+    totalOrderQty += isNaN(qty) ? 0 : qty;
+    totalPendingQty += isNaN(pendingQty) ? 0 : pendingQty;
+  });
+  res.status(200).json({
+    success: true,
+    data: { totalOrderQty, totalPendingQty },
+  });
+});
+
+// 19. Sales Dashboard - Payment and Delivery
+exports.getSalesPaymentAndDelivery = catchAsyncErrors(async (req, res, next) => {
+  const docketsProcess = await Process.findOne({ processId: "MS/R/006A" });
+  if (!docketsProcess) {
+    return next(new ErrorHandler("Dockets Process (MS/R/006A) not found", 404));
+  }
+
+  let paymentPendingCount = 0;
+  let totalLeadTime = 0;
+  let leadTimeCount = 0;
+
+  docketsProcess.data.forEach((row) => {
+    const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
+    if (payment && (payment.toUpperCase() === "OPEN" || payment.toUpperCase() === "PENDING")) {
+      paymentPendingCount++;
+    }
+
+    const orderDateVal = row.items.find((i) => i.key === "ORDER DATE")?.value;
+    const deliveryDateVal = row.items.find((i) => i.key === "DELIVERY DATE")?.value;
+    if (orderDateVal && deliveryDateVal) {
+      const diff = (Number(deliveryDateVal) - Number(orderDateVal)) / (1000 * 60 * 60 * 24);
+      if (diff >= 0) {
+        totalLeadTime += diff;
+        leadTimeCount++;
+      }
+    }
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      paymentPendingCount,
+      averageLeadTime: leadTimeCount > 0 ? Number((totalLeadTime / leadTimeCount).toFixed(1)) : 0,
+    },
+  });
+});
+
+// 20. Sales Dashboard - Trail Status
+exports.getSalesTrailStatus = catchAsyncErrors(async (req, res, next) => {
+  const customerTrailProcess = await Process.findOne({ processId: "MS/R/003" });
+  if (!customerTrailProcess) {
+    return next(new ErrorHandler("Customer Trail Process (MS/R/003) not found", 404));
+  }
+  const trailStatus = {};
+  customerTrailProcess.data.forEach((row) => {
+    const status = row.items.find((i) => i.key.includes("STATUS"))?.value || "UNKNOWN";
+    trailStatus[status] = (trailStatus[status] || 0) + 1;
+  });
+  res.status(200).json({
+    success: true,
+    data: trailStatus,
+  });
+});
+

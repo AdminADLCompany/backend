@@ -35,6 +35,12 @@ const {
   getEmployeeAttendanceDashboard,
   getProcurementRegisterDashboard,
   getInwardDashboard,
+  getSalesCustomerCount,
+  getSalesTrend,
+  getQuotationStatus,
+  getSalesOrderDetails,
+  getSalesPaymentAndDelivery,
+  getSalesTrailStatus,
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -59,6 +65,12 @@ router.route('/hr/overheadDashboard').get(getEmployeeOverheadDashboard);
 router.route('/hr/attendanceDashboard').get(getEmployeeAttendanceDashboard);
 router.route('/purchase/procurementDashboard').get(getProcurementRegisterDashboard);
 router.route('/purchase/inwardDashboard').get(getInwardDashboard);
+router.route('/sales/customerCount').get(getSalesCustomerCount);
+router.route('/sales/salesTrend').get(getSalesTrend);
+router.route('/sales/quotationStatus').get(getQuotationStatus);
+router.route('/sales/orderDetails').get(getSalesOrderDetails);
+router.route('/sales/paymentAndDelivery').get(getSalesPaymentAndDelivery);
+router.route('/sales/trailStatus').get(getSalesTrailStatus);
 
 router.route("/create").post(isAuthenticatedUser, createProcess);
 router
