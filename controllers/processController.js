@@ -1573,6 +1573,7 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
 
@@ -1612,6 +1613,7 @@ exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 2. Product Dashboard
 exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
   const ProductsProcess = await Process.findOne({ processId: "PD/R/001" });
   const BOMProcess = await Process.findOne({ processId: "PD/R/002" });
@@ -1641,6 +1643,7 @@ exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 3. Revision Control Dashboard
 exports.getRevisionControlDashboard = catchAsyncErrors(async (req, res, next) => {
   const revisionControlProcess = await Process.findOne({ processId: "PD/R/003" });
 
@@ -1670,6 +1673,7 @@ exports.getRevisionControlDashboard = catchAsyncErrors(async (req, res, next) =>
   });
 });
 
+// 4. OEE Dashboard
 exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
   const productionReportProcess = await Process.findOne({
     processId: "PD/R/005",
@@ -1725,6 +1729,7 @@ exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 5. Production Report Dashboard
 exports.getDashboardProductReport = catchAsyncErrors(async (req, res, next) => {
   const productionReportProcess = await Process.findOne({
     processId: "PD/R/005",
@@ -1798,6 +1803,7 @@ exports.getDashboardProductReport = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 6. Inhouse Dashboard
 exports.getInhouseDashboard = catchAsyncErrors(async (req, res, next) => {
   const [
     productionReportProcess,
@@ -1907,6 +1913,7 @@ exports.getInhouseDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// 7. Customer Quality Dashboard
 exports.getCustomerQualityDashboard = catchAsyncErrors(
   async (req, res, next) => {
     const [compliantProcess, orderListProcess] = await Promise.all([
@@ -1973,6 +1980,7 @@ exports.getCustomerQualityDashboard = catchAsyncErrors(
   },
 );
 
+// 8. Incoming Inspection Dashboard
 exports.getIncomingInspectionDashboard = catchAsyncErrors(
   async (req, res, next) => {
     const incomingInspectionProcess = await Process.findOne({
@@ -1998,3 +2006,269 @@ exports.getIncomingInspectionDashboard = catchAsyncErrors(
     });
   },
 );
+
+// 9. Quality audit.
+exports.getQualityAuditsDashboard = catchAsyncErrors(async (req, res, next) => {
+  // Using QA/F/005 as per the provided JSON snippet for Quality Audits
+  const qualityAuditsProcess = await Process.findOne({ processId: "QA/F/005" });
+
+  if (!qualityAuditsProcess) {
+    return next(new ErrorHandler("Quality Audits Process (QA/F/005) not found", 404));
+  }
+
+  const today = new Date();
+
+  // Filter unclosed audits (AUDIT STATUS !== "Closed")
+  const unclosedAudits = qualityAuditsProcess.data.filter((row) => {
+    const status = row.items.find((i) => i.key === "AUDIT STATUS")?.value;
+    return status?.toLowerCase() !== "closed";
+  });
+
+  // Count closed audits
+  const closedAuditsCount = qualityAuditsProcess.data.filter((row) => {
+    const status = row.items.find((i) => i.key === "AUDIT STATUS")?.value;
+    return status?.toLowerCase() === "closed";
+  }).length;
+
+  // Requirement: Left Box (Audit Pending) - Format: Date
+  // We'll return dates of pending audits.
+  const pendingDates = unclosedAudits
+    .map((row) => {
+      const dateItem = row.items.find((i) => i.key === "DATE");
+      return dateItem ? dateItem.value : null;
+    })
+    .filter(Boolean);
+
+  // Requirement: Right Table (Quality Audit Pendings)
+  // Headers: DEPARTMENT, NO OF NC, RESPONSIBLE, DUE (Today - Date)
+  const pendingTableData = unclosedAudits.map((row) => {
+    const items = row.items;
+    const dateVal = items.find((i) => i.key === "DATE")?.value;
+    const department = items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
+    const ncValue = items.find((i) => i.key === "NC")?.value || "0";
+    const responsible = items.find((i) => i.key === "RESPONSIBLE")?.value || "N/A";
+
+    let due = "N/A";
+    if (dateVal) {
+      const auditDate = new Date(Number(dateVal));
+      if (!isNaN(auditDate.getTime())) {
+        const diffTime = today - auditDate;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        due = diffDays > 0 ? `${diffDays} days` : "Today";
+      }
+    }
+
+    return {
+      department,
+      noOfNC: Number(ncValue),
+      responsible,
+      due,
+      date: dateVal, // Epoch as string
+    };
+  });
+
+  // Requirement: View Department Wise (Sorting by Department)
+  pendingTableData.sort((a, b) => a.department.localeCompare(b.department));
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalPending: unclosedAudits.length,
+      totalClosed: closedAuditsCount,
+      pendingDates: pendingDates, // For the "Format: Date" box
+      table: pendingTableData, // For the "Format: Table" box
+    },
+  });
+});
+
+// 10. Continuous Improvement
+exports.getContinuousImprovementDashboard = catchAsyncErrors(async (req, res, next) => {
+  // Using MR/R/005 as per the provided JSON snippet for Continuous Improvement
+  const continuousImprovementProcess = await Process.findOne({ processId: "MR/R/005" });
+
+  if (!continuousImprovementProcess) {
+    return next(new ErrorHandler("Continuous Improvement Process (MR/R/005) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+
+  let filteredData = continuousImprovementProcess.data;
+
+  // Filter by date if both startDate and endDate are provided
+  if (startDate && endDate) {
+    const start = Number(startDate);
+    const end = Number(endDate);
+
+    filteredData = filteredData.filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= start && epochMs <= end;
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      improvementCount: filteredData.length,
+    },
+  });
+});
+
+// 11. Employee Overhead Dashboard
+exports.getEmployeeOverheadDashboard = catchAsyncErrors(async (req, res, next) => {
+  const employeeHistoryProcess = await Process.findOne({ processId: "HR/R/001" });
+
+  if (!employeeHistoryProcess) {
+    return next(new ErrorHandler("Employee History Process (HR/R/001) not found", 404));
+  }
+
+  const { department } = req.query;
+
+  // Actual OverHead = Count of active employees
+  let activeEmployees = employeeHistoryProcess.data.filter((row) => {
+    const relievingDate = row.items.find((i) => i.key === "DATE OF RELELIVING")?.value;
+    return !relievingDate || relievingDate === "";
+  });
+
+  if (department) {
+    activeEmployees = activeEmployees.filter((row) => {
+      const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value;
+      return dept?.toLowerCase() === department.toLowerCase();
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      actualOverHead: activeEmployees.length,
+    },
+  });
+});
+
+// 12. Employee Attendance % (Department Wise % for Pie Chart)
+exports.getEmployeeAttendanceDashboard = catchAsyncErrors(async (req, res, next) => {
+  const employeeHistoryProcess = await Process.findOne({ processId: "HR/R/001" });
+
+  if (!employeeHistoryProcess) {
+    return next(new ErrorHandler("Employee History Process (HR/R/001) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+
+  // Filter active employees within the date range
+  const now = Date.now();
+  const effectiveStart = startDate ? Number(startDate) : 0;
+  const effectiveEnd = endDate ? Number(endDate) : now;
+
+  let activeDuringRange = employeeHistoryProcess.data.filter((row) => {
+    const joinValue = row.items.find((i) => i.key === "DATE OF JOINING")?.value;
+    const reliefValue = row.items.find((i) => i.key === "DATE OF RELELIVING")?.value;
+
+    const joinEpoch = Number(joinValue);
+    const reliefEpoch = reliefValue ? Number(reliefValue) : Infinity;
+
+    // Check if employee tenure overlaps with the range
+    return joinEpoch <= effectiveEnd && reliefEpoch >= effectiveStart;
+  });
+
+  // Calculate department distribution
+  const departmentStats = {};
+  activeDuringRange.forEach((row) => {
+    const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value || "Unassigned";
+    departmentStats[dept] = (departmentStats[dept] || 0) + 1;
+  });
+
+  const total = activeDuringRange.length;
+  const chartData = Object.entries(departmentStats).map(([label, count]) => {
+    const percentage = total > 0 ? (count / total) * 100 : 0;
+    return {
+      label,
+      value: count,
+      percentage: Number(percentage.toFixed(2)),
+    };
+  });
+
+  res.status(200).json({
+    success: true,
+    data: chartData,
+  });
+});
+
+// 13. Procurement Register
+exports.getProcurementRegisterDashboard = catchAsyncErrors(async (req, res, next) => {
+  // Using PR/R/003 as per the provided JSON snippet for Procurement Register
+  const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+
+  if (!procurementProcess) {
+    return next(new ErrorHandler("Procurement Process (PR/R/003) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+
+  // 1. Initial status filter: PR STATUS === "PENDING"
+  let filteredData = procurementProcess.data.filter((row) => {
+    const status = row.items.find((i) => i.key === "PR STATUS")?.value;
+    return status?.toUpperCase() === "PENDING";
+  });
+
+  // 2. Filter by date if both startDate and endDate are provided
+  if (startDate && endDate) {
+    const start = Number(startDate);
+    const end = Number(endDate);
+
+    filteredData = filteredData.filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= start && epochMs <= end;
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalPending: filteredData.length,
+      pendingRecords: filteredData,
+    },
+  });
+});
+
+// 14. Inward Dashboard
+exports.getInwardDashboard = catchAsyncErrors(async (req, res, next) => {
+  // Using PR/R/003A as per the provided JSON snippet for Inward
+  const inwardProcess = await Process.findOne({ processId: "PR/R/003A" });
+
+  if (!inwardProcess) {
+    return next(new ErrorHandler("Inward Process (PR/R/003A) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+
+  // 1. Initial status filter: PAYMENT === "OPEN"
+  let filteredData = inwardProcess.data.filter((row) => {
+    const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
+    return payment?.toUpperCase() === "OPEN";
+  });
+
+  // 2. Filter by DELIVERY DATE if both startDate and endDate are provided
+  if (startDate && endDate) {
+    const start = Number(startDate);
+    const end = Number(endDate);
+
+    filteredData = filteredData.filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DELIVERY DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= start && epochMs <= end;
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalOpen: filteredData.length,
+      openRecords: filteredData,
+    },
+  });
+});

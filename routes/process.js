@@ -29,6 +29,12 @@ const {
   getInhouseDashboard,
   getCustomerQualityDashboard,
   getIncomingInspectionDashboard,
+  getQualityAuditsDashboard,
+  getContinuousImprovementDashboard,
+  getEmployeeOverheadDashboard,
+  getEmployeeAttendanceDashboard,
+  getProcurementRegisterDashboard,
+  getInwardDashboard,
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -47,6 +53,12 @@ router.route('/manufacturing/productionReportDashboard').get(getDashboardProduct
 router.route('/manufacturing/inhouseDashboard').get(getInhouseDashboard);
 router.route('/quality/customercomplientRegister').get(getCustomerQualityDashboard);
 router.route('/quality/incomingInspection').get(getIncomingInspectionDashboard);
+router.route('/quality/qualityAuditDashboard').get(getQualityAuditsDashboard);
+router.route('/quality/continuousImprovement').get(getContinuousImprovementDashboard);
+router.route('/hr/overheadDashboard').get(getEmployeeOverheadDashboard);
+router.route('/hr/attendanceDashboard').get(getEmployeeAttendanceDashboard);
+router.route('/purchase/procurementDashboard').get(getProcurementRegisterDashboard);
+router.route('/purchase/inwardDashboard').get(getInwardDashboard);
 
 router.route("/create").post(isAuthenticatedUser, createProcess);
 router
