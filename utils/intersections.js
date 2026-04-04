@@ -1480,55 +1480,74 @@ exports.handleUpdateIntersection = async (
               (i) => i.key === "REJECT STAGE",
             )?.value;
 
-            const reworkRow = {
-              items: [
-                { key: "PART NO", value: partNo || "", process: "value" },
-                { key: "PART NAME", value: partName || "", process: "value" },
-                {
-                  key: "PROBLEM DESCRIPTION",
-                  value: problemDesc || "",
-                  process: "value",
-                },
-                { key: "REWORK QTY", value: "0", process: "value" },
-                {
-                  key: "REJECT STAGE",
-                  value: rejectStage || "",
-                  process: "value",
-                },
-                {
-                  key: "ACTION PLAN",
-                  value:
-                    items.find((i) => i.key === "ACTION PLAN")?.value || "",
-                  process: "value",
-                },
-                {
-                  key: "VERIFIED BY",
-                  value:
-                    items.find((i) => i.key === "VERIFIED BY")?.value || "",
-                  process: "value",
-                },
-                {
-                  key: "RR STATUS",
-                  value: "",
-                  process: "select",
-                },
-              ],
-              rowDataId: row.rowDataId,
-            };
+            const existingReworkRow = reworkReport.data.find(
+              (r) => r.rowDataId && r.rowDataId.toString() === row.rowDataId.toString()
+            );
 
-            reworkReport.data.push(reworkRow);
-            reworkReport.updatedBy = userId;
-            await reworkReport.save();
+            if (existingReworkRow) {
+              const updateItem = (key, val) => {
+                const item = existingReworkRow.items.find((i) => i.key === key);
+                if (item) item.value = val;
+              };
+              updateItem("PART NO", partNo || "");
+              updateItem("PART NAME", partName || "");
+              updateItem("PROBLEM DESCRIPTION", problemDesc || "");
+              updateItem("REJECT STAGE", rejectStage || "");
+              updateItem("ACTION PLAN", items.find((i) => i.key === "ACTION PLAN")?.value || "");
+              updateItem("VERIFIED BY", items.find((i) => i.key === "VERIFIED BY")?.value || "");
+              
+              reworkReport.updatedBy = userId;
+              reworkReport.markModified("data");
+            } else {
+              const reworkRow = {
+                items: [
+                  { key: "PART NO", value: partNo || "", process: "value" },
+                  { key: "PART NAME", value: partName || "", process: "value" },
+                  {
+                    key: "PROBLEM DESCRIPTION",
+                    value: problemDesc || "",
+                    process: "value",
+                  },
+                  { key: "REWORK QTY", value: "0", process: "value" },
+                  {
+                    key: "REJECT STAGE",
+                    value: rejectStage || "",
+                    process: "value",
+                  },
+                  {
+                    key: "ACTION PLAN",
+                    value:
+                      items.find((i) => i.key === "ACTION PLAN")?.value || "",
+                    process: "value",
+                  },
+                  {
+                    key: "VERIFIED BY",
+                    value:
+                      items.find((i) => i.key === "VERIFIED BY")?.value || "",
+                    process: "value",
+                  },
+                  {
+                    key: "RR STATUS",
+                    value: "",
+                    process: "select",
+                  },
+                ],
+                rowDataId: row.rowDataId,
+              };
 
-            await History.create({
-              collectionName: "Process",
-              documentId: reworkReport._id,
-              rowId: reworkReport.data[reworkReport.data.length - 1]._id,
-              operation: "create",
-              oldData: null,
-              newData: reworkRow,
-              changedBy: userId,
-            });
+              reworkReport.data.push(reworkRow);
+              reworkReport.updatedBy = userId;
+
+              await History.create({
+                collectionName: "Process",
+                documentId: reworkReport._id,
+                rowId: reworkReport.data[reworkReport.data.length - 1]._id,
+                operation: "create",
+                oldData: null,
+                newData: reworkRow,
+                changedBy: userId,
+              });
+            }
           }
         }
       }
@@ -1548,100 +1567,129 @@ exports.handleUpdateIntersection = async (
         //   processId: "ST/R/006",
         // });
         if (orderListProcess) {
-          let orderListRow = {
-            items: [
-              {
-                key: "DATE",
-                value: items.find((i) => i.key === "DATE")?.value,
-                process: "value",
-              },
-              {
-                key: "QUOTE NO",
-                value: items.find((i) => i.key === "QUOTATION NO")?.value,
-                process: "value",
-              },
-              {
-                key: "PART NO",
-                value: items.find((i) => i.key === "PART-NO")?.value,
-                process: "value",
-              },
-              {
-                key: "PART NAME",
-                value: items.find((i) => i.key === "PART-NAME")?.value,
-                process: "value",
-              },
-              {
-                key: "ENQ BY",
-                value: items.find((i) => i.key === "ENQ BY")?.value,
-                process: "value",
-              },
-              {
-                key: "CUSTOMER NAME",
-                value: items.find((i) => i.key === "CUSTOMER-NAME")?.value,
-                process: "value",
-              },
-              {
-                key: "LOCATION",
-                value: items.find((i) => i.key === "LOCATION")?.value,
-                process: "value",
-              },
-              {
-                key: "DESCRIPTION",
-                value: items.find((i) => i.key === "DESCRIPTION")?.value,
-                process: "value",
-              },
-              {
-                key: "QTY",
-                value: items.find((i) => i.key === "QTY")?.value,
-                process: "value",
-              },
-              {
-                key: "PENDING QTY",
-                value: items.find((i) => i.key === "QTY")?.value,
-                process: "value",
-              },
-              {
-                key: "UNITS",
-                value: items.find((i) => i.key === "UNITS")?.value,
-                process: "value",
-              },
-              {
-                key: "VALUE",
-                value: "",
-                process: "value",
-              },
-              {
-                key: "ORDER DATE",
-                value: items.find((i) => i.key === "ORDER DATE")?.value,
-                process: "value",
-              },
-              {
-                key: "PO NO",
-                value: items.find((i) => i.key === "PO NO")?.value,
-                process: "value",
-              },
-              {
-                key: "LEAD TIME",
-                value: items.find((i) => i.key === "LEAD TIME")?.value,
-                process: "value",
-              },
-              {
-                key: "DOCKET",
-                value: "MS/R/006A",
-                process: "processId",
-              },
-              {
-                key: "ORDER STATUS",
-                value: "",
-                process: "select",
-              },
-            ],
-            rowDataId: rowId,
-          };
+          const existingOrderListRow = orderListProcess.data.find(
+            (r) => r.rowDataId && r.rowDataId.toString() === rowId.toString()
+          );
 
-          orderListRow.items = await linkProcessIdItems(orderListRow.items);
-          orderListProcess.data.push(orderListRow);
-          orderListProcess.updatedBy = userId;
+          if (existingOrderListRow) {
+            const updateItem = (key, val) => {
+              const item = existingOrderListRow.items.find((i) => i.key === key);
+              if (item) item.value = val;
+            };
+
+            updateItem("DATE", items.find((i) => i.key === "DATE")?.value);
+            updateItem("QUOTE NO", items.find((i) => i.key === "QUOTATION NO")?.value);
+            updateItem("PART NO", items.find((i) => i.key === "PART-NO")?.value);
+            updateItem("PART NAME", items.find((i) => i.key === "PART-NAME")?.value);
+            updateItem("ENQ BY", items.find((i) => i.key === "ENQ BY")?.value);
+            updateItem("CUSTOMER NAME", items.find((i) => i.key === "CUSTOMER-NAME")?.value);
+            updateItem("LOCATION", items.find((i) => i.key === "LOCATION")?.value);
+            updateItem("DESCRIPTION", items.find((i) => i.key === "DESCRIPTION")?.value);
+            updateItem("QTY", items.find((i) => i.key === "QTY")?.value);
+            updateItem("PENDING QTY", items.find((i) => i.key === "QTY")?.value);
+            updateItem("UNITS", items.find((i) => i.key === "UNITS")?.value);
+            updateItem("ORDER DATE", items.find((i) => i.key === "ORDER DATE")?.value);
+            updateItem("PO NO", items.find((i) => i.key === "PO NO")?.value);
+            updateItem("LEAD TIME", items.find((i) => i.key === "LEAD TIME")?.value);
+
+            orderListProcess.updatedBy = userId;
+            orderListProcess.markModified("data");
+          } else {
+            let orderListRow = {
+              items: [
+                {
+                  key: "DATE",
+                  value: items.find((i) => i.key === "DATE")?.value,
+                  process: "value",
+                },
+                {
+                  key: "QUOTE NO",
+                  value: items.find((i) => i.key === "QUOTATION NO")?.value,
+                  process: "value",
+                },
+                {
+                  key: "PART NO",
+                  value: items.find((i) => i.key === "PART-NO")?.value,
+                  process: "value",
+                },
+                {
+                  key: "PART NAME",
+                  value: items.find((i) => i.key === "PART-NAME")?.value,
+                  process: "value",
+                },
+                {
+                  key: "ENQ BY",
+                  value: items.find((i) => i.key === "ENQ BY")?.value,
+                  process: "value",
+                },
+                {
+                  key: "CUSTOMER NAME",
+                  value: items.find((i) => i.key === "CUSTOMER-NAME")?.value,
+                  process: "value",
+                },
+                {
+                  key: "LOCATION",
+                  value: items.find((i) => i.key === "LOCATION")?.value,
+                  process: "value",
+                },
+                {
+                  key: "DESCRIPTION",
+                  value: items.find((i) => i.key === "DESCRIPTION")?.value,
+                  process: "value",
+                },
+                {
+                  key: "QTY",
+                  value: items.find((i) => i.key === "QTY")?.value,
+                  process: "value",
+                },
+                {
+                  key: "PENDING QTY",
+                  value: items.find((i) => i.key === "QTY")?.value,
+                  process: "value",
+                },
+                {
+                  key: "UNITS",
+                  value: items.find((i) => i.key === "UNITS")?.value,
+                  process: "value",
+                },
+                {
+                  key: "VALUE",
+                  value: "",
+                  process: "value",
+                },
+                {
+                  key: "ORDER DATE",
+                  value: items.find((i) => i.key === "ORDER DATE")?.value,
+                  process: "value",
+                },
+                {
+                  key: "PO NO",
+                  value: items.find((i) => i.key === "PO NO")?.value,
+                  process: "value",
+                },
+                {
+                  key: "LEAD TIME",
+                  value: items.find((i) => i.key === "LEAD TIME")?.value,
+                  process: "value",
+                },
+                {
+                  key: "DOCKET",
+                  value: "MS/R/006A",
+                  process: "processId",
+                },
+                {
+                  key: "ORDER STATUS",
+                  value: "",
+                  process: "select",
+                },
+              ],
+              rowDataId: rowId,
+            };
+
+            orderListRow.items = await linkProcessIdItems(orderListRow.items);
+            orderListProcess.data.push(orderListRow);
+            orderListProcess.updatedBy = userId;
+          }
         }
 
         // const matchedRow = storeRegisterProcess.data.find((itemRow) => {
@@ -2105,88 +2153,119 @@ exports.handleUpdateIntersection = async (
         }
 
         // Update Store Register
-        if (storeRegisterProcess) {
-          const storeRegisterRow = {
-            items: [
-              {
-                key: "DATE",
-                value: new Date().toISOString().split("T")[0],
-                process: "date",
-              },
-              { key: "IN / OUT", value: "IN", process: "value" },
-              {
-                key: "ITEM CATEGORY",
-                value:
-                  items.find((i) => i.key === "ITEM CATEGORY")?.value || "",
-                process: "value",
-              },
-              {
-                key: "ITEM CODE",
-                value: items.find((i) => i.key === "ITEM CODE")?.value || "",
-                process: "value",
-              },
-              {
-                key: "ITEM NAME",
-                value: items.find((i) => i.key === "ITEM NAME")?.value || "",
-                process: "value",
-              },
-              {
-                key: "VENDOR / CUSTOMER",
-                value: items.find((i) => i.key === "VENDOR NAME")?.value || "",
-                process: "value",
-              },
-              {
-                key: "QTY",
-                value:
-                  (
-                    Number(items.find((i) => i.key === "QTY")?.value) -
-                    Number(
-                      matchQulaityInspection.items.find(
-                        (i) => i.key === "DEFECT QUANTITY",
-                      )?.value || 0,
-                    )
-                  ).toString() || 0,
-                process: "value",
-              },
-              {
-                key: "DOC &REPORT NO",
-                value:
-                  currentInwardRow.items.find((i) => i.key === "INVOICE NO")
-                    ?.value || "",
-                process: "value",
-              },
-            ],
-            rowDataId: row.rowDataId,
-          };
+        let diffQty = 0;
+        const newStoreQty =
+          Number(items.find((i) => i.key === "QTY")?.value || 0) -
+          Number(
+            matchQulaityInspection?.items?.find((i) => i.key === "DEFECT QUANTITY")?.value || 0
+          );
 
-          storeRegisterProcess.data.push(storeRegisterRow);
-          storeRegisterProcess.updatedBy = userId;
+        if (storeRegisterProcess) {
+          const existingStoreRegisterRow = storeRegisterProcess.data.find(
+            (r) => r.rowDataId && r.rowDataId.toString() === row.rowDataId.toString()
+          );
+
+          if (existingStoreRegisterRow) {
+            const prevStoreQty = Number(
+              existingStoreRegisterRow.items.find((i) => i.key === "QTY")?.value || 0
+            );
+            diffQty = newStoreQty - prevStoreQty;
+
+            const updateItem = (key, val) => {
+              const item = existingStoreRegisterRow.items.find((i) => i.key === key);
+              if (item) item.value = val;
+            };
+
+            updateItem("DATE", new Date().toISOString().split("T")[0]);
+            updateItem(
+              "ITEM CATEGORY",
+              items.find((i) => i.key === "ITEM CATEGORY")?.value || ""
+            );
+            updateItem("ITEM CODE", items.find((i) => i.key === "ITEM CODE")?.value || "");
+            updateItem("ITEM NAME", items.find((i) => i.key === "ITEM NAME")?.value || "");
+            updateItem(
+              "VENDOR / CUSTOMER",
+              items.find((i) => i.key === "VENDOR NAME")?.value || ""
+            );
+            updateItem("QTY", newStoreQty.toString());
+            updateItem(
+              "DOC &REPORT NO",
+              currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")?.value || ""
+            );
+
+            storeRegisterProcess.updatedBy = userId;
+            storeRegisterProcess.markModified("data");
+          } else {
+            diffQty = newStoreQty; // First time additions contribute the full quantity
+
+            const storeRegisterRow = {
+              items: [
+                {
+                  key: "DATE",
+                  value: new Date().toISOString().split("T")[0],
+                  process: "date",
+                },
+                { key: "IN / OUT", value: "IN", process: "value" },
+                {
+                  key: "ITEM CATEGORY",
+                  value: items.find((i) => i.key === "ITEM CATEGORY")?.value || "",
+                  process: "value",
+                },
+                {
+                  key: "ITEM CODE",
+                  value: items.find((i) => i.key === "ITEM CODE")?.value || "",
+                  process: "value",
+                },
+                {
+                  key: "ITEM NAME",
+                  value: items.find((i) => i.key === "ITEM NAME")?.value || "",
+                  process: "value",
+                },
+                {
+                  key: "VENDOR / CUSTOMER",
+                  value: items.find((i) => i.key === "VENDOR NAME")?.value || "",
+                  process: "value",
+                },
+                {
+                  key: "QTY",
+                  value: newStoreQty.toString(),
+                  process: "value",
+                },
+                {
+                  key: "DOC &REPORT NO",
+                  value:
+                    currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")?.value || "",
+                  process: "value",
+                },
+              ],
+              rowDataId: row.rowDataId,
+            };
+
+            storeRegisterProcess.data.push(storeRegisterRow);
+            storeRegisterProcess.updatedBy = userId;
+          }
         }
 
         if (stockDataProcess) {
           const itemCode = items.find((i) => i.key === "ITEM CODE")?.value;
-          const qty = Number(items.find((i) => i.key === "QTY")?.value || 0);
 
           if (!itemCode) return { success: true };
 
           // Find if stock entry for this item already exists
           const existingStockRow = stockDataProcess.data.find(
-            (r) =>
-              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
+            (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
           );
 
           if (existingStockRow) {
-            // 🟢 Update existing stock entry
+            // 🟢 Update existing stock entry incrementally using the diffQty
             const inItem = existingStockRow.items.find((i) => i.key === "IN");
             const outItem = existingStockRow.items.find((i) => i.key === "OUT");
-            const stockItem = existingStockRow.items.find(
-              (i) => i.key === "STOCK",
-            );
+            const stockItem = existingStockRow.items.find((i) => i.key === "STOCK");
 
             const currentIn = Number(inItem?.value || 0);
             const currentOut = Number(outItem?.value || 0);
 
-            const newIn = currentIn + qty;
+            const newIn = currentIn + diffQty;
             const newStock = newIn - currentOut;
 
             // Update values
@@ -2194,21 +2273,21 @@ exports.handleUpdateIntersection = async (
             if (stockItem) stockItem.value = newStock.toString();
 
             stockDataProcess.updatedBy = userId;
+            stockDataProcess.markModified("data");
           } else {
             // 🔵 Create new stock entry for this item
             const itemCategory =
               items.find((i) => i.key === "ITEM CATEGORY")?.value || "";
-            const itemName =
-              items.find((i) => i.key === "ITEM NAME")?.value || "";
+            const itemName = items.find((i) => i.key === "ITEM NAME")?.value || "";
 
             const newStockRow = {
               items: [
                 { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
                 { key: "ITEM CODE", value: itemCode, process: "value" },
                 { key: "ITEM NAME", value: itemName, process: "value" },
-                { key: "IN", value: qty.toString(), process: "value" },
+                { key: "IN", value: newStoreQty.toString(), process: "value" },
                 { key: "OUT", value: "0", process: "value" },
-                { key: "STOCK", value: qty.toString(), process: "value" },
+                { key: "STOCK", value: newStoreQty.toString(), process: "value" },
               ],
               rowDataId: row.rowDataId,
             };

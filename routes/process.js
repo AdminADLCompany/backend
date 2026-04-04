@@ -99,6 +99,11 @@ router
       { name: "NPD FORM", maxCount: 1 },
       { name: "EVALUATE", maxCount: 1 },
       { name: "IMAGE", maxCount: 1 },
+      { name: "FILE UPLOAD", maxCount: 1 },
+      { name: "CALIBRATION CERTIFICATE NO / DATE", maxCount: 1 },
+      { name: "SERVICE REPORT", maxCount: 1 },
+      { name: "T-REPORT", maxCount: 1 },
+      { name: "MASTER PIECE UPLOAD", maxCount: 1 },
     ]),
     addData,
   )
@@ -113,6 +118,11 @@ router
       { name: "NPD FORM", maxCount: 1 },
       { name: "EVALUATE", maxCount: 1 },
       { name: "IMAGE", maxCount: 1 },
+      { name: "FILE UPLOAD", maxCount: 1 },
+      { name: "CALIBRATION CERTIFICATE NO / DATE", maxCount: 1 },
+      { name: "SERVICE REPORT", maxCount: 1 },
+      { name: "T-REPORT", maxCount: 1 },
+      { name: "MASTER PIECE UPLOAD", maxCount: 1 },
     ]),
     updateData,
   )
