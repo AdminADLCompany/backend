@@ -1663,6 +1663,35 @@ exports.getMainRevisionControlDashboard = catchAsyncErrors(async (req, res, next
   });
 });
 
+exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => {
+  const orderListProcess = await Process.findOne({ processId: "DD/R/003" });
+
+  if (!orderListProcess) {
+    return next(new ErrorHandler("Order List Process (DD/R/003) not found", 404));
+  }
+
+  const allData = orderListProcess.data
+    .map((row) => {
+      const items = row.items;
+      return {
+        date: items.find((i) => i.key === "DATE")?.value || "",
+        part: items.find((i) => i.key === "PART NO")?.value || "",
+        status: items.find((i) => i.key === "ORDER STATUS")?.value || "",
+        due: (() => {
+          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
+          if (!epoch) return null;
+          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+        })(),
+      };
+    });
+
+  res.status(200).json({
+    success: true,
+    count: allData.length,
+    data: allData,
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
