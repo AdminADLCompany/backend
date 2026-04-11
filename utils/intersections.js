@@ -818,7 +818,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         );
 
       const actualPlan =
-        (totalTime - (settings || 0)) /
+        (totalTime) /
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
@@ -2326,7 +2326,7 @@ exports.handleUpdateIntersection = async (
         );
 
       const actualPlan =
-        (totalTime - (settings || 0)) /
+        (totalTime) /
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
