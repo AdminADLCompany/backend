@@ -41,6 +41,7 @@ const {
   getSalesOrderDetails,
   getSalesPaymentAndDelivery,
   getSalesTrailStatus,
+  getMainNPDRegisterDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -50,6 +51,8 @@ router
   .post(getMainDashBoardDetails);
 router.route("/all").get(isAuthenticatedUser, getAllProcesses);
 router.route("/search").get(isAuthenticatedUser, getProductDetails);
+
+router.route('/main/design/npdRegister').get(getMainNPDRegisterDashboard);
 
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
 router.route('/design/productsDashboard').get(getProductDashboard);

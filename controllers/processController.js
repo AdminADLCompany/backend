@@ -1032,12 +1032,6 @@ exports.deleteAllProcessData = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-exports.getDashBoardDetailsByDepartment = catchAsyncErrors(
-  async (req, res, next) => {
-    const department = req.params.department;
-  },
-);
-
 exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
   const [
     productionPlanProcess,
@@ -1570,6 +1564,49 @@ exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: response,
+  });
+});
+
+exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) => {
+  const npdProcess = await Process.findOne({ processId: "DD/R/010" });
+
+  if (!npdProcess) {
+    return next(new ErrorHandler("NPD Register Process (DD/R/010) not found", 404));
+  }
+
+  const filteredData = npdProcess.data
+    .filter((row) => {
+      const proto = row.items.find((i) => i.key === "PROTO")?.process;
+      const validation = row.items.find((i) => i.key === "VALIDATION")?.process;
+      const master = (
+        row.items.find((i) => i.key === "MASTER PIECE") ||
+        row.items.find((i) => i.key === "MASTER")
+      )?.process;
+
+      // Filter: return rows where PROTO, VALIDATION, or MASTER is NOT green
+      return proto !== "green" || validation !== "green" || master !== "green";
+    })
+    .map((row) => {
+      const items = row.items;
+      return {
+        from: items.find((i) => i.key === "FROM")?.value || "",
+        date: items.find((i) => i.key === "DATE")?.value || "",
+        part: items.find((i) => i.key === "PART")?.value || items.find((i) => i.key === "PART NAME")?.value || "",
+        proto: items.find((i) => i.key === "PROTO")?.process || "",
+        validation: items.find((i) => i.key === "VALIDATION")?.process || "",
+        master: (items.find((i) => i.key === "MASTER PIECE") || items.find((i) => i.key === "MASTER"))?.process || "",
+        due: (() => {
+          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
+          if (!epoch) return null;
+          return Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24));
+        })(),
+      };
+    });
+
+  res.status(200).json({
+    success: true,
+    count: filteredData.length,
+    data: filteredData,
   });
 });
 
