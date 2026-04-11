@@ -2299,7 +2299,7 @@ exports.getProcurementRegisterDashboard = catchAsyncErrors(async (req, res, next
   // 1. Initial status filter: PR STATUS === "PENDING"
   let filteredData = procurementProcess.data.filter((row) => {
     const status = row.items.find((i) => i.key === "PR STATUS")?.value;
-    return status?.toUpperCase() === "PENDING";
+    return status?.toUpperCase() !== "CLOSED";
   });
 
   // 2. Filter by date if both startDate and endDate are provided
