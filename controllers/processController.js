@@ -1640,7 +1640,7 @@ exports.getMainRevisionControlDashboard = catchAsyncErrors(async (req, res, next
   const filteredData = revisionControlProcess.data
     .filter((row) => {
       const status = row.items.find((i) => i.key === "REVISION STATUS")?.value;
-      return status?.toLowerCase() !== "inrevision";
+      return status?.toLowerCase() !== "revised";
     })
     .map((row) => {
       const items = row.items;
