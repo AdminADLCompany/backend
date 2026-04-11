@@ -485,7 +485,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     const breakValues = calculateBreaks(start, end, sceduledLoss);
     const breakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
 
-    const workingTime = totalTime - breakMinutes;
+    const workingTime = totalTime - breakMinutes - settings;
     const plan = Math.floor(workingTime / cycleTime);
 
     // ---- update PLAN field ----
