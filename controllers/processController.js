@@ -492,7 +492,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     const planItem = items.find((i) => i.key === "PLAN");
     if (planItem) planItem.value = String(plan);
 
-    const breakHourItem = totalTime - breakMinutes - settings;
+    const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
     let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
     breakHourProcessItem.process = breakHourItem.toString();
     const settingColor = items.find((i) => i.key === "SETTING");
