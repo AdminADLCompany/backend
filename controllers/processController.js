@@ -1670,25 +1670,27 @@ exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => 
     return next(new ErrorHandler("Order List Process (DD/R/003) not found", 404));
   }
 
-  const allData = orderListProcess.data
-    .map((row) => {
-      const items = row.items;
-      return {
-        date: items.find((i) => i.key === "DATE")?.value || "",
-        part: items.find((i) => i.key === "PART NO")?.value || "",
-        status: items.find((i) => i.key === "ORDER STATUS")?.value || "",
-        due: (() => {
-          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
-          if (!epoch) return null;
-          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
-        })(),
-      };
+  const { startDate, endDate } = req.query;
+  const now = new Date();
+  const effectiveStart = startDate
+    ? Number(startDate)
+    : new Date(now.getFullYear(), 0, 1).getTime();
+  const effectiveEnd = endDate
+    ? Number(endDate)
+    : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+
+  const filteredData = orderListProcess.data
+    .filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= effectiveStart && epochMs <= effectiveEnd;
     });
 
   res.status(200).json({
     success: true,
-    count: allData.length,
-    data: allData,
+    count: filteredData.length,
+    data: filteredData,
   });
 });
 
