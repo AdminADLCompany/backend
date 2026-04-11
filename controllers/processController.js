@@ -2338,7 +2338,7 @@ exports.getInwardDashboard = catchAsyncErrors(async (req, res, next) => {
   // 1. Initial status filter: PAYMENT === "OPEN"
   let filteredData = inwardProcess.data.filter((row) => {
     const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
-    return payment?.toUpperCase() === "OPEN";
+    return payment?.toUpperCase() !== "CLOSED";
   });
 
   // 2. Filter by DELIVERY DATE if both startDate and endDate are provided
