@@ -2601,6 +2601,93 @@ exports.handleDeleteIntersection = async (
         await deleteLinkedRows(id, (row) => row.rowDataId === rowId);
     }
 
+    else if (process.processId === "MR/R/002A") {
+      const rowDataId = currentRow.rowDataId;
+      const productionReportProcess = await Process.findOne({
+        processId: "MR/R/002",
+      });
+      const breakHourProcess = await Process.findOne({
+        processId: "MR/R/002B",
+      });
+
+      if (productionReportProcess && rowDataId) {
+        const prodRow = productionReportProcess.data.find(
+          (r) => r._id.toString() === rowDataId.toString(),
+        );
+        if (prodRow) {
+          const start = toMinutes(
+            prodRow.items.find((i) => i.key === "START TIME")?.value,
+          );
+          const endRaw = toMinutes(
+            prodRow.items.find((i) => i.key === "END TIME")?.value,
+          );
+          const cycleTime = Number(
+            prodRow.items.find((i) => i.key === "CYCLE TIME")?.value || 1,
+          );
+          const actual = Number(
+            prodRow.items.find((i) => i.key === "ACTUAL")?.value || 0,
+          );
+          const reject = Number(
+            prodRow.items.find((i) => i.key === "REJECT")?.value || 0,
+          );
+          const planItem = prodRow.items.find((i) => i.key === "PLAN");
+          const breakHourItem = prodRow.items.find((i) => i.key === "BREAK HOUR");
+          const oeeItem = prodRow.items.find((i) => i.key === "OEE");
+          const settingColor = prodRow.items.find((i) => i.key === "SETTING");
+
+          const end = endRaw < start ? endRaw + 1440 : endRaw;
+          const elapsed = end - start;
+
+          const breakValues = calculateBreaks(start, end, sceduledLoss);
+          const breakMinutes = Object.values(breakValues).reduce(
+            (acc, val) => acc + val,
+            0,
+          );
+
+          const workingTime = elapsed - breakMinutes; // Settings is now 0
+          const plan = Math.floor(workingTime / cycleTime);
+          const lostTime = (plan - actual) * cycleTime;
+
+          let OEE = 0;
+          if (plan > 0 && actual > 0 && workingTime > 0) {
+            OEE =
+              (((actual / plan) *
+                ((actual - reject) / actual) *
+                (workingTime - lostTime)) /
+                workingTime) *
+              100;
+          }
+
+          if (planItem) planItem.value = plan.toString();
+          if (breakHourItem) breakHourItem.process = lostTime.toString();
+          if (oeeItem) oeeItem.value = Math.floor(OEE).toString();
+          if (settingColor) settingColor.process = "blue"; // Reset to 'no settings'
+
+          productionReportProcess.markModified("data");
+          productionReportProcess.updatedBy = userId;
+          await productionReportProcess.save();
+        }
+      }
+
+      if (breakHourProcess && rowDataId) {
+        const breakRow = breakHourProcess.data.find(
+          (r) => r.rowDataId && r.rowDataId.toString() === rowDataId.toString(),
+        );
+        if (breakRow) {
+          const settingsItem = breakRow.items.find((i) => i.key === "SETTINGS");
+          const setupLossItem = breakRow.items.find(
+            (i) => i.key === "SETUP LOSS",
+          );
+          if (settingsItem) settingsItem.value = "0";
+          if (setupLossItem) setupLossItem.value = "0";
+
+          breakHourProcess.markModified("data");
+          breakHourProcess.updatedBy = userId;
+          await breakHourProcess.save();
+        }
+      }
+    }
+
     // ---- MR/R/003B → MR/R/003 ---- Rejection Report
     else if (process.processId === "MR/R/003") {
       await deleteLinkedRows("MR/R/003B", (row) => row.rowDataId === rowId);
