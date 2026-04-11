@@ -1694,6 +1694,44 @@ exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => 
   });
 });
 
+exports.getMainDocketsDashboard = catchAsyncErrors(async (req, res, next) => {
+  // Using PR/R/003A as per the provided JSON snippet for Inward
+  const docketsProcess = await Process.findOne({ processId: "MS/R/006A" });
+
+  if (!docketsProcess) {
+    return next(new ErrorHandler("Dockets Process (MS/R/006A) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+  const now = new Date();
+  // 1. Initial status filter: PAYMENT === "OPEN"
+  let filteredData = docketsProcess.data.filter((row) => {
+    const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
+    return payment?.toUpperCase() !== "CLOSED";
+  });
+
+  // 2. Filter by DELIVERY DATE if both startDate and endDate are provided
+  if (startDate && endDate) {
+    const start = Number(startDate);
+    const end = Number(endDate);
+
+    filteredData = filteredData.filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DELIVERY DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= start && epochMs <= end;
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalOpen: filteredData.length,
+      openRecords: filteredData,
+    },
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });

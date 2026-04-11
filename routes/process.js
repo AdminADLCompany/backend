@@ -44,7 +44,8 @@ const {
   getMainNPDRegisterDashboard,
   getMainProductListDashboard,
   getMainRevisionControlDashboard,
-  getMainOrderListDashboard
+  getMainOrderListDashboard,
+  getMainDocketsDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -59,6 +60,7 @@ router.route('/main/design/npdRegister').get(getMainNPDRegisterDashboard);
 router.route('/main/design/productList').get(getMainProductListDashboard);
 router.route('/main/design/revisionControl').get(getMainRevisionControlDashboard);
 router.route('/main/sales/orderList').get(getMainOrderListDashboard);
+router.route('/main/sales/dockets').get(getMainDocketsDashboard);
 
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
 router.route('/design/productsDashboard').get(getProductDashboard);
