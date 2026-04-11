@@ -1951,7 +1951,7 @@ exports.getInhouseDashboard = catchAsyncErrors(async (req, res, next) => {
   }, 0);
 
   const sumOfActualQtyP = filteredProduction.reduce((acc, row) => {
-    const val = row.items.find((item) => item.key === "ACTUAL QTY");
+    const val = row.items.find((item) => item.key === "ACTUAL");
     return acc + (Number(val?.value) || 0);
   }, 0);
 
