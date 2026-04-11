@@ -1109,7 +1109,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           statusCode: 404,
         };
 
-      if (isMoving === "ORDER") {
+      if (isMoving === "ORDER_HOLDED") {
         let orderListRow = {
           items: [
             {
@@ -1207,7 +1207,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         orderListProcess.updatedBy = userId;
         await orderListProcess.save();
       }
-    } else if (process.processId === "DD/R/012") {
+    } 
+    
+    else if (process.processId === "DD/R/012") {
       const NPDRegisterProcess = await Process.findOne({
         processId: "DD/R/010",
       });
