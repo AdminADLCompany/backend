@@ -1610,6 +1610,26 @@ exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) =>
   });
 });
 
+exports.getMainProductListDashboard = catchAsyncErrors(async (req, res, next) => {
+  const productListProcess = await Process.findOne({ processId: "DD/R/001" });
+  const BOMProcess = await Process.findOne({ processId: "DD/R/002" });
+
+  if (!productListProcess || !BOMProcess) {
+    return next(new ErrorHandler("Product List Process (DD/R/001) or BOM Process (DD/R/002) not found", 404));
+  }
+
+  // GET THE COUNT OF THE RECORDS.
+  const totalProducts = productListProcess.data.length;
+  const totalBOMs = BOMProcess.data.length;
+
+  res.status(200).json({
+    success: true,
+    totalProducts,
+    totalBOMs,
+  });
+
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
