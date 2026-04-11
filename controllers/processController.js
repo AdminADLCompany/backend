@@ -486,6 +486,8 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
     let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
     breakHourProcessItem.process = breakHourItem.toString();
+    const settingColor = items.find((i) => i.key === "SETTING");
+    settingColor.process = "blue";
 
     const OEE =
       (((actual / plan) *
