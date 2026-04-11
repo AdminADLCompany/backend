@@ -312,7 +312,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         };
 
       const MoveItem = items.find((i) => i.key === "RM")?.value;
-      if (MoveItem !== "Planning") return { success: true };
+      if (MoveItem !== "Planning_holded") return { success: true };
 
       const planNo = items.find((i) => i.key === "PLAN NO")?.value;
       const date = items.find((i) => i.key === "DATE")?.value;
