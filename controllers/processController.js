@@ -230,7 +230,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       if (item.process === "processId" && item.value) {
         const p = await Process.findOne({ processId: item.value });
         if (p?._id) item.value = `processId - ${p._id}`;
-        item.process = item.key === "PROTO" ? "red" : "value";
+        item.process = (item.key === "PROTO" || item.key === "VALIDATION" || item.key === "MASTER PIECE") ? "red" : "value";
       }
     }
 
