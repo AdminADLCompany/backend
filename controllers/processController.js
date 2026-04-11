@@ -1664,10 +1664,10 @@ exports.getMainRevisionControlDashboard = catchAsyncErrors(async (req, res, next
 });
 
 exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => {
-  const orderListProcess = await Process.findOne({ processId: "DD/R/003" });
+  const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
 
   if (!orderListProcess) {
-    return next(new ErrorHandler("Order List Process (DD/R/003) not found", 404));
+    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
   }
 
   const { startDate, endDate } = req.query;
