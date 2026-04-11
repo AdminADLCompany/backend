@@ -42,7 +42,8 @@ const {
   getSalesPaymentAndDelivery,
   getSalesTrailStatus,
   getMainNPDRegisterDashboard,
-  getMainProductListDashboard
+  getMainProductListDashboard,
+  getMainRevisionControlDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -55,6 +56,7 @@ router.route("/search").get(isAuthenticatedUser, getProductDetails);
 
 router.route('/main/design/npdRegister').get(getMainNPDRegisterDashboard);
 router.route('/main/design/productList').get(getMainProductListDashboard);
+router.route('/main/design/revisionControl').get(getMainRevisionControlDashboard);
 
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
 router.route('/design/productsDashboard').get(getProductDashboard);

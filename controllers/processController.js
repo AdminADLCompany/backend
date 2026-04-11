@@ -1598,7 +1598,7 @@ exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) =>
         due: (() => {
           const epoch = Number(items.find((i) => i.key === "DATE")?.value);
           if (!epoch) return null;
-          return Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24));
+          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
         })(),
       };
     });
@@ -1628,6 +1628,39 @@ exports.getMainProductListDashboard = catchAsyncErrors(async (req, res, next) =>
     totalBOMs,
   });
 
+});
+
+exports.getMainRevisionControlDashboard = catchAsyncErrors(async (req, res, next) => {
+  const revisionControlProcess = await Process.findOne({ processId: "DD/R/005" });
+
+  if (!revisionControlProcess) {
+    return next(new ErrorHandler("Revision Control Process (DD/R/003) not found", 404));
+  }
+
+  const filteredData = revisionControlProcess.data
+    .filter((row) => {
+      const status = row.items.find((i) => i.key === "REVISION STATUS")?.value;
+      return status?.toLowerCase() !== "inrevision";
+    })
+    .map((row) => {
+      const items = row.items;
+      return {
+        date: items.find((i) => i.key === "DATE")?.value || "",
+        part: items.find((i) => i.key === "PART NO")?.value || "",
+        status: items.find((i) => i.key === "REVISION STATUS")?.value || "",
+        due: (() => {
+          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
+          if (!epoch) return null;
+          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+        })(),
+      };
+    });
+
+  res.status(200).json({
+    success: true,
+    count: filteredData.length,
+    data: filteredData,
+  });
 });
 
 // 1. NPD Dashboard
