@@ -811,7 +811,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime =
+      const totalTime = 
         Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
@@ -2318,15 +2318,12 @@ exports.handleUpdateIntersection = async (
 
       // ---- BREAK VALUES ----
       const breakValues = calculateBreaks(start, end, sceduledLoss);
+      const totalBreakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
 
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime = (start - end) - breakValues - settings
-        // Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-        // Number(
-        //   productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        // );
+      const totalTime = (end - start) - totalBreakMinutes - Number(settings || 0);
 
       const actualPlan =
         (totalTime || 0) /

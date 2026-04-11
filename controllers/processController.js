@@ -462,12 +462,21 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   }
 
   if (process.processId === "MR/R/002") {
+
+    const settingProcess = await Process.findOne({ processId: "MR/R/002A" });
+
+    const settingData = settingProcess?.data.find((itemRow) => {
+      return itemRow.rowDataId.toString() === rowId.toString();
+    });
+
     const start = toMinutes(items.find((i) => i.key === "START TIME")?.value);
     const endRaw = toMinutes(items.find((i) => i.key === "END TIME")?.value);
     const cycleTime = Number(items.find((i) => i.key === "CYCLE TIME")?.value);
     const actual = Number(items.find((i) => i.key === "ACTUAL")?.value);
     const reject = Number(items.find((i) => i.key === "REJECT")?.value);
     const oeeItem = items.find((i) => i.key === "OEE");
+
+    const settings = Number(settingData?.items.find((item) => item.key === "SETTING TIME")?.value ?? 0);
 
     const end = endRaw < start ? endRaw + 1440 : endRaw;
     const totalTime = end - start;
@@ -483,7 +492,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     const planItem = items.find((i) => i.key === "PLAN");
     if (planItem) planItem.value = String(plan);
 
-    const breakHourItem = (Number(planItem.value) - actual) * cycleTime;
+    const breakHourItem = totalTime - breakMinutes - settings;
     let breakHourProcessItem = items.find((i) => i.key === "BREAK HOUR");
     breakHourProcessItem.process = breakHourItem.toString();
     const settingColor = items.find((i) => i.key === "SETTING");
