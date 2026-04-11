@@ -2636,6 +2636,7 @@ exports.handleDeleteIntersection = async (
 
     // ---- PR/R/003 → MR/R/001 ---- Procurement Register X
     else if (process.processId === "PR/R/003") {
+      await deleteLinkedRows("PR/R/003A", (row) => row.rowDataId === rowId);
       await deleteLinkedRows("MR/R/001", (row) => row.rowDataId === rowId);
     }
 
