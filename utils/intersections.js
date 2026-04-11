@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Process = require("../models/process");
 const History = require("../models/history");
+const { sceduledLoss } = require("./constants");
 
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
@@ -11,37 +12,35 @@ function toMinutes(t) {
   return h * 60 + m;
 }
 
-const sceduledLoss = [
-  { label: "FOOD", time: 15, type: "breakFast", from: "08:30", to: "08:45" },
-  { label: "FOOD", time: 20, type: "Lunch", from: "12:30", to: "12:50" },
-  { label: "FOOD", time: 20, type: "Dinner", from: "20:30", to: "20:50" },
-  {
-    label: "FOOD",
-    time: 20,
-    type: "nightBreakFast",
-    from: "02:00",
-    to: "02:20",
-  },
-  { label: "TEA", time: 5, type: "earlyTea", from: "07:00", to: "07:05" },
-  { label: "TEA", time: 10, type: "morningTea", from: "10:30", to: "10:40" },
-  { label: "TEA", time: 5, type: "afternoonTea", from: "16:30", to: "16:35" },
-  { label: "TEA", time: 10, type: "eveningTea", from: "00:00", to: "00:10" },
-  { label: "TEA", time: 10, type: "nightTea", from: "04:00", to: "04:10" },
-  { label: "PRAYER", time: 20, type: "fajar", from: "05:40", to: "06:00" },
-  { label: "PRAYER", time: 10, type: "zuhar", from: "12:50", to: "13:00" },
-  { label: "PRAYER", time: 10, type: "asar", from: "16:35", to: "16:45" },
-  { label: "PRAYER", time: 15, type: "maghrib", from: "18:30", to: "18:45" },
-  { label: "PRAYER", time: 10, type: "isha", from: "20:50", to: "21:00" },
-  { label: "DRM", time: 0, type: "drm", from: "nil", to: "nil" },
-  { label: "INSPECTION", time: 0, type: "inspection", from: "nil", to: "nil" },
-  {
-    label: "COMMUNICATION",
-    time: 0,
-    type: "communication",
-    from: "nil",
-    to: "nil",
-  },
-];
+const calculateBreaks = (start, end, lossArray) => {
+  const breakValues = {};
+  lossArray.forEach((b) => {
+    if (!b.from || b.from === "nil" || !b.to || b.to === "nil") return;
+
+    let bStart = toMinutes(b.from);
+    let bEnd = toMinutes(b.to);
+    if (bEnd < bStart) bEnd += 1440;
+
+    // Check three cycles: yesterday, today, and tomorrow to handle overlaps properly
+    [0, 1440, -1440].forEach((offset) => {
+      const s = bStart + offset;
+      const e = bEnd + offset;
+
+      const intersectStart = Math.max(start, s);
+      const intersectEnd = Math.min(end, e);
+
+      if (intersectStart < intersectEnd) {
+        const overlap = intersectEnd - intersectStart;
+        const key = b.label.toUpperCase();
+        breakValues[key] = (breakValues[key] || 0) + (overlap > 0 ? overlap : 0);
+      }
+    });
+  });
+  return breakValues;
+};
+
+exports.calculateBreaks = calculateBreaks;
+
 
 const linkProcessIdItems = async (rowItems) => {
   if (!rowItems || !Array.isArray(rowItems)) return rowItems;
@@ -864,19 +863,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       await productionReportProcess.save();
 
       // ---- BREAK VALUES ----
-      const breakValues = {};
-      sceduledLoss.forEach((b) => {
-        if (b.from === "nil" || b.to === "nil") return;
-
-        let bStart = toMinutes(b.from);
-        let bEnd = toMinutes(b.to);
-        if (bEnd < bStart) bEnd += 1440;
-
-        if (bStart < end && bEnd > start) {
-          const key = b.label.toUpperCase();
-          breakValues[key] = (breakValues[key] || 0) + b.time;
-        }
-      });
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
@@ -1181,19 +1168,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           const end = endRaw < start ? endRaw + 1440 : endRaw;
 
           // ---- BREAK VALUES ----
-          const breakValues = {};
-          sceduledLoss.forEach((b) => {
-            if (b.from === "nil" || b.to === "nil") return;
-
-            let bStart = toMinutes(b.from);
-            let bEnd = toMinutes(b.to);
-            if (bEnd < bStart) bEnd += 1440;
-
-            if (bStart < end && bEnd > start) {
-              const key = b.label.toUpperCase();
-              breakValues[key] = (breakValues[key] || 0) + b.time;
-            }
-          });
+          const breakValues = calculateBreaks(start, end, sceduledLoss);
 
           const asVal = (k) => breakValues[k] || 0;
 
@@ -2396,19 +2371,7 @@ exports.handleUpdateIntersection = async (
       await productionReportProcess.save();
 
       // ---- BREAK VALUES ----
-      const breakValues = {};
-      sceduledLoss.forEach((b) => {
-        if (b.from === "nil" || b.to === "nil") return;
-
-        let bStart = toMinutes(b.from);
-        let bEnd = toMinutes(b.to);
-        if (bEnd < bStart) bEnd += 1440;
-
-        if (bStart < end && bEnd > start) {
-          const key = b.label.toUpperCase();
-          breakValues[key] = (breakValues[key] || 0) + b.time;
-        }
-      });
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
