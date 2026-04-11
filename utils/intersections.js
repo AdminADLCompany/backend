@@ -790,7 +790,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const endRaw = toMinutes(
         productionReportRow.items.find((i) => i.key === "END TIME")?.value,
       );
-      const statusSetting = items.find((i) => i.key === "STATUS OF SETTING")?.value;
+      const statusSetting = items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
 
       const settingColor = productionReportRow.items.find(
         (i) => i.key === "SETTING",
@@ -841,8 +841,8 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         (actualPlan - Number(actualItem)) * cycleTime;
       
       let oeeCalculation = 0;
-      if (statusSetting.toLowerCase() === 'under process') {
-        oeeCalculation = Number(settings) / (totalTimeElapsed - breakMinutes);
+      if (statusSetting?.toLowerCase() === 'under process') {
+        oeeCalculation = (Number(settings) / (totalTimeElapsed - breakMinutes)) * 100;
       } else if (actualPlan > 0 && workingTime > 0 && Number(actualItem) > 0) {
         oeeCalculation =
           (((Number(actualItem) / actualPlan) *
@@ -2321,7 +2321,7 @@ exports.handleUpdateIntersection = async (
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
       const totalTimeElapsed = end - start;
-      const statusSetting = items.find((i) => i.key === "STATUS OF SETTING")?.value;
+      const statusSetting = items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
 
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
@@ -2353,8 +2353,8 @@ exports.handleUpdateIntersection = async (
         (actualPlan - Number(actualItem)) * cycleTime;
       
       let oeeCalculation = 0;
-      if (statusSetting.toLowerCase() === 'under process') {
-        oeeCalculation = Number(settings) / (totalTimeElapsed - breakMinutes);
+      if (statusSetting?.toLowerCase() === 'under process') {
+        oeeCalculation = (Number(settings) / (totalTimeElapsed - breakMinutes)) * 100;
       } else if (actualPlan > 0 && workingTime > 0 && Number(actualItem) > 0) {
         oeeCalculation =
           (((Number(actualItem) / actualPlan) *
