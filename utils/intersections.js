@@ -807,29 +807,24 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       }
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
+      const totalTimeElapsed = end - start;
 
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime =
-        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-        Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        );
+      // ---- calculate break minutes ----
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
+      const breakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
 
-      const actualPlan =
-        (totalTime - (settings || 0)) /
-        Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        );
+      const workingTime = totalTimeElapsed - breakMinutes - Number(settings || 0);
 
       const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
       const actualItem = productionReportRow.items.find(
         (i) => i.key === "ACTUAL",
       )?.value;
-      const cycleTime = productionReportRow.items.find(
+      const cycleTime = Number(productionReportRow.items.find(
         (i) => i.key === "CYCLE TIME",
-      )?.value;
+      )?.value || 1);
       const reject = Number(
         productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0,
       );
@@ -838,14 +833,20 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       );
       const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
 
+      const actualPlan = Math.floor(workingTime / cycleTime);
+
       let valueOfProcess =
-        (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
-      let oeeCalculation =
-        (((Number(actualItem) / Number(actualPlan)) *
-          ((Number(actualItem) - reject) / Number(actualItem)) *
-          (totalTime - valueOfProcess)) /
-          totalTime) *
-        100;
+        (actualPlan - Number(actualItem)) * cycleTime;
+      
+      let oeeCalculation = 0;
+      if (actualPlan > 0 && workingTime > 0 && Number(actualItem) > 0) {
+        oeeCalculation =
+          (((Number(actualItem) / actualPlan) *
+            ((Number(actualItem) - reject) / Number(actualItem)) *
+            (workingTime - valueOfProcess)) /
+            workingTime) *
+          100;
+      }
 
       if (!planItem)
         return {
@@ -853,9 +854,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           message: "PLAN field not found",
           statusCode: 404,
         };
-      breakHour.process = valueOfProcess.toString();
+      if (breakHour) breakHour.process = valueOfProcess.toString();
       planItem.value = actualPlan.toString();
-      oeeItem.value = Math.floor(oeeCalculation).toString();
+      if (oeeItem) oeeItem.value = Math.floor(oeeCalculation).toString();
 
       productionReportProcess.markModified("data");
       productionReportProcess.updatedBy = userId;
@@ -863,7 +864,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       await productionReportProcess.save();
 
       // ---- BREAK VALUES ----
-      const breakValues = calculateBreaks(start, end, sceduledLoss);
+      // (reuse existing breakValues)
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
@@ -2315,29 +2316,24 @@ exports.handleUpdateIntersection = async (
       if (settingColor) settingColor.process = "green";
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
+      const totalTimeElapsed = end - start;
 
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime =
-        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-        Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        );
+      // ---- calculate break minutes ----
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
+      const breakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
 
-      const actualPlan =
-        (totalTime) /
-        Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        );
+      const workingTime = totalTimeElapsed - breakMinutes - Number(settings || 0);
 
       const planItem = productionReportRow.items.find((i) => i.key === "PLAN");
       const actualItem = productionReportRow.items.find(
         (i) => i.key === "ACTUAL",
       )?.value;
-      const cycleTime = productionReportRow.items.find(
+      const cycleTime = Number(productionReportRow.items.find(
         (i) => i.key === "CYCLE TIME",
-      )?.value;
+      )?.value || 1);
       const reject = Number(
         productionReportRow.items.find((i) => i.key === "REJECT")?.value || 0,
       );
@@ -2346,14 +2342,20 @@ exports.handleUpdateIntersection = async (
       );
       const oeeItem = productionReportRow.items.find((i) => i.key === "OEE");
 
+      const actualPlan = Math.floor(workingTime / cycleTime);
+
       let valueOfProcess =
-        (Number(actualPlan) - Number(actualItem)) * Number(cycleTime);
-      let oeeCalculation =
-        (((Number(actualItem) / Number(actualPlan)) *
-          ((Number(actualItem) - reject) / Number(actualItem)) *
-          (totalTime - valueOfProcess)) /
-          totalTime) *
-        100;
+        (actualPlan - Number(actualItem)) * cycleTime;
+      
+      let oeeCalculation = 0;
+      if (actualPlan > 0 && workingTime > 0 && Number(actualItem) > 0) {
+        oeeCalculation =
+          (((Number(actualItem) / actualPlan) *
+            ((Number(actualItem) - reject) / Number(actualItem)) *
+            (workingTime - valueOfProcess)) /
+            workingTime) *
+          100;
+      }
 
       if (!planItem)
         return {
@@ -2371,7 +2373,7 @@ exports.handleUpdateIntersection = async (
       await productionReportProcess.save();
 
       // ---- BREAK VALUES ----
-      const breakValues = calculateBreaks(start, end, sceduledLoss);
+      // (reuse existing breakValues)
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
