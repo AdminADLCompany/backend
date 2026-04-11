@@ -1229,6 +1229,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
             items.find((i) => i.key === "PART-NAME")?.value ||
             "";
 
+          const date = items.find((i) => i.key === "DATE")?.value || "";
           const shift = items.find((i) => i.key === "SHIFT")?.value || "";
           const existingRejectRow = rejectionReportProcess.data.find(
             (r) =>
@@ -1243,7 +1244,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
 
             updateItem("PART NO", partNo);
             updateItem("PART NAME", partName);
-            updateItem("REWORK QTY", rejectQty.toString());
+            updateItem("REJECT QTY", rejectQty.toString());
             // Optionally update empty fields if needed, or leave them be
 
             rejectionReportProcess.markModified("data");
@@ -1252,7 +1253,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               items: [
                 {
                   key: "DATE",
-                  value: "",
+                  value: date,
                   process: "value",
                 },
                 { key: "SHIFT", value: shift, process: "value" },
@@ -2492,7 +2493,7 @@ exports.handleUpdateIntersection = async (
     } 
     
     else if (process.processId === "MR/R/002") {
-      const rowDataId = rowId.toString();
+      const rowDataId = row.rowDataId;
       const rejectionReportProcess = await Process.findOne({
         processId: "MR/R/003",
       });
@@ -2510,6 +2511,7 @@ exports.handleUpdateIntersection = async (
             items.find((i) => i.key === "PART-NAME")?.value ||
             "";
 
+          const date = items.find((i) => i.key === "DATE")?.value || "";
           const shift = items.find((i) => i.key === "SHIFT")?.value || "";
 
           const existingRejectRow = rejectionReportProcess.data.find(
@@ -2521,10 +2523,11 @@ exports.handleUpdateIntersection = async (
               const item = existingRejectRow.items.find((i) => i.key === key);
               if (item) item.value = val;
             };
-
+            updateItem("DATE", date);
+            updateItem("SHIFT", shift);
             updateItem("PART NO", partNo);
             updateItem("PART NAME", partName);
-            updateItem("REWORK QTY", rejectQty.toString());
+            updateItem("REJECT QTY", rejectQty.toString());
             // Optionally update empty fields if needed, or leave them be
 
             rejectionReportProcess.markModified("data");
@@ -2533,7 +2536,7 @@ exports.handleUpdateIntersection = async (
               items: [
                 {
                   key: "DATE",
-                  value: "",
+                  value: date,
                   process: "value",
                 },
                 { key: "SHIFT", value: shift, process: "value" },
