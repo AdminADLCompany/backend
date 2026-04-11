@@ -32,8 +32,7 @@ const calculateBreaks = (start, end, lossArray) => {
       if (intersectStart < intersectEnd) {
         const overlap = intersectEnd - intersectStart;
         const key = b.label.toUpperCase();
-        breakValues[key] =
-          (breakValues[key] || 0) + (overlap > 0 ? overlap : 0);
+        breakValues[key] = (breakValues[key] || 0) + (overlap > 0 ? overlap : 0);
       }
     });
   });
@@ -41,6 +40,7 @@ const calculateBreaks = (start, end, lossArray) => {
 };
 
 exports.calculateBreaks = calculateBreaks;
+
 
 const linkProcessIdItems = async (rowItems) => {
   if (!rowItems || !Array.isArray(rowItems)) return rowItems;
@@ -637,7 +637,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       stockDataProcess.updatedBy = userId;
       await storeRegisterProcess.save();
       await stockDataProcess.save();
-    } else if (process.processId === "MS/R/006A") {
+    }
+    
+    else if (process.processId === "MS/R/006A") {
       const itemListProcess = await Process.findOne({
         processId: "PR/R/002",
       });
@@ -1049,7 +1051,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         orderListProcess.updatedBy = userId;
         await orderListProcess.save();
       }
-    } else if (process.processId === "DD/R/012") {
+    } 
+    
+    else if (process.processId === "DD/R/012") {
       const NPDRegisterProcess = await Process.findOne({
         processId: "DD/R/010",
       });
@@ -1312,9 +1316,7 @@ exports.handleUpdateIntersection = async (
             )?.value;
 
             const existingReworkRow = reworkReport.data.find(
-              (r) =>
-                r.rowDataId &&
-                r.rowDataId.toString() === row.rowDataId.toString(),
+              (r) => r.rowDataId && r.rowDataId.toString() === row.rowDataId.toString()
             );
 
             if (existingReworkRow) {
@@ -1326,15 +1328,9 @@ exports.handleUpdateIntersection = async (
               updateItem("PART NAME", partName || "");
               updateItem("PROBLEM DESCRIPTION", problemDesc || "");
               updateItem("REJECT STAGE", rejectStage || "");
-              updateItem(
-                "ACTION PLAN",
-                items.find((i) => i.key === "ACTION PLAN")?.value || "",
-              );
-              updateItem(
-                "VERIFIED BY",
-                items.find((i) => i.key === "VERIFIED BY")?.value || "",
-              );
-
+              updateItem("ACTION PLAN", items.find((i) => i.key === "ACTION PLAN")?.value || "");
+              updateItem("VERIFIED BY", items.find((i) => i.key === "VERIFIED BY")?.value || "");
+              
               reworkReport.updatedBy = userId;
               reworkReport.markModified("data");
             } else {
@@ -1407,58 +1403,29 @@ exports.handleUpdateIntersection = async (
         // });
         if (orderListProcess) {
           const existingOrderListRow = orderListProcess.data.find(
-            (r) => r.rowDataId && r.rowDataId.toString() === rowId.toString(),
+            (r) => r.rowDataId && r.rowDataId.toString() === rowId.toString()
           );
 
           if (existingOrderListRow) {
             const updateItem = (key, val) => {
-              const item = existingOrderListRow.items.find(
-                (i) => i.key === key,
-              );
+              const item = existingOrderListRow.items.find((i) => i.key === key);
               if (item) item.value = val;
             };
 
             updateItem("DATE", items.find((i) => i.key === "DATE")?.value);
-            updateItem(
-              "QUOTE NO",
-              items.find((i) => i.key === "QUOTATION NO")?.value,
-            );
-            updateItem(
-              "PART NO",
-              items.find((i) => i.key === "PART-NO")?.value,
-            );
-            updateItem(
-              "PART NAME",
-              items.find((i) => i.key === "PART-NAME")?.value,
-            );
+            updateItem("QUOTE NO", items.find((i) => i.key === "QUOTATION NO")?.value);
+            updateItem("PART NO", items.find((i) => i.key === "PART-NO")?.value);
+            updateItem("PART NAME", items.find((i) => i.key === "PART-NAME")?.value);
             updateItem("ENQ BY", items.find((i) => i.key === "ENQ BY")?.value);
-            updateItem(
-              "CUSTOMER NAME",
-              items.find((i) => i.key === "CUSTOMER-NAME")?.value,
-            );
-            updateItem(
-              "LOCATION",
-              items.find((i) => i.key === "LOCATION")?.value,
-            );
-            updateItem(
-              "DESCRIPTION",
-              items.find((i) => i.key === "DESCRIPTION")?.value,
-            );
+            updateItem("CUSTOMER NAME", items.find((i) => i.key === "CUSTOMER-NAME")?.value);
+            updateItem("LOCATION", items.find((i) => i.key === "LOCATION")?.value);
+            updateItem("DESCRIPTION", items.find((i) => i.key === "DESCRIPTION")?.value);
             updateItem("QTY", items.find((i) => i.key === "QTY")?.value);
-            updateItem(
-              "PENDING QTY",
-              items.find((i) => i.key === "QTY")?.value,
-            );
+            updateItem("PENDING QTY", items.find((i) => i.key === "QTY")?.value);
             updateItem("UNITS", items.find((i) => i.key === "UNITS")?.value);
-            updateItem(
-              "ORDER DATE",
-              items.find((i) => i.key === "ORDER DATE")?.value,
-            );
+            updateItem("ORDER DATE", items.find((i) => i.key === "ORDER DATE")?.value);
             updateItem("PO NO", items.find((i) => i.key === "PO NO")?.value);
-            updateItem(
-              "LEAD TIME",
-              items.find((i) => i.key === "LEAD TIME")?.value,
-            );
+            updateItem("LEAD TIME", items.find((i) => i.key === "LEAD TIME")?.value);
 
             orderListProcess.updatedBy = userId;
             orderListProcess.markModified("data");
@@ -1833,12 +1800,8 @@ exports.handleUpdateIntersection = async (
       let totalDefectQty = 0;
 
       matchRows.forEach((inRow) => {
-        const delQty = Number(
-          inRow.items.find((i) => i.key === "QTY")?.value || 0,
-        );
-        const defQty = Number(
-          inRow.items.find((i) => i.key === "DEFECT QTY")?.value || 0,
-        );
+        const delQty = Number(inRow.items.find((i) => i.key === "QTY")?.value || 0);
+        const defQty = Number(inRow.items.find((i) => i.key === "DEFECT QTY")?.value || 0);
         totalDeliveryQty += delQty;
         totalDefectQty += defQty;
       });
@@ -1851,14 +1814,10 @@ exports.handleUpdateIntersection = async (
       );
 
       if (prRow) {
-        const prQty = Number(
-          prRow.items.find((i) => i.key === "QTY")?.value || 0,
-        );
+        const prQty = Number(prRow.items.find((i) => i.key === "QTY")?.value || 0);
         const pendingQty = prQty - netReceived;
 
-        const prPendingQtyItem = prRow.items.find(
-          (i) => i.key === "PENDING QTY",
-        );
+        const prPendingQtyItem = prRow.items.find((i) => i.key === "PENDING QTY");
         if (prPendingQtyItem) {
           prPendingQtyItem.value = String(pendingQty);
         } else {
@@ -1868,7 +1827,7 @@ exports.handleUpdateIntersection = async (
             process: "value",
           });
         }
-
+        
         procurementProcess.markModified("data");
         await procurementProcess.save();
       }
@@ -1877,9 +1836,7 @@ exports.handleUpdateIntersection = async (
     // ---- PR/R/003A → QA/R/003 ---- Inward -> Incoming Inspection ---
     else if (process.processId === "QA/R/003") {
       const inwardProcess = await Process.findOne({ processId: "PR/R/003A" });
-      const procurementProcess = await Process.findOne({
-        processId: "PR/R/003",
-      });
+      const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
       const storeRegisterProcess = await Process.findOne({
         processId: "ST/R/005",
       });
@@ -1919,8 +1876,8 @@ exports.handleUpdateIntersection = async (
             {
               key: "PO NO",
               value:
-                currentInwardRow?.items.find((i) => i.key === "PO NO")?.value ||
-                "",
+                currentInwardRow?.items.find((i) => i.key === "PO NO")
+                  ?.value || "",
               process: "value",
             },
             {
@@ -1965,8 +1922,9 @@ exports.handleUpdateIntersection = async (
             },
             {
               key: "VALUE",
-              value: currentInwardRow.items.find((i) => i.key === "VALUE")
-                ?.value,
+              value: currentInwardRow.items.find(
+                (i) => i.key === "VALUE",
+              )?.value,
               process: "value",
             },
             {
@@ -1991,9 +1949,7 @@ exports.handleUpdateIntersection = async (
 
         if (procumentMatchRow) {
           const netReceived = inwardProcess.data.reduce((sum, inRow) => {
-            const isInspectionDone =
-              inRow.items.find((i) => i.key === "QC QUALITY INSPECTION")
-                ?.value === "Inspection Done";
+            const isInspectionDone = inRow.items.find((i) => i.key === "QC QUALITY INSPECTION")?.value === "Inspection Done";
             if (
               inRow.rowDataId &&
               inRow.rowDataId.toString() === procumentMatchRow._id.toString() &&
@@ -2036,54 +1992,40 @@ exports.handleUpdateIntersection = async (
         const newStoreQty =
           Number(items.find((i) => i.key === "QTY")?.value || 0) -
           Number(
-            matchQulaityInspection?.items?.find(
-              (i) => i.key === "DEFECT QUANTITY",
-            )?.value || 0,
+            matchQulaityInspection?.items?.find((i) => i.key === "DEFECT QUANTITY")?.value || 0
           );
 
         if (storeRegisterProcess) {
           const existingStoreRegisterRow = storeRegisterProcess.data.find(
-            (r) =>
-              r.rowDataId &&
-              r.rowDataId.toString() === row.rowDataId.toString(),
+            (r) => r.rowDataId && r.rowDataId.toString() === row.rowDataId.toString()
           );
 
           if (existingStoreRegisterRow) {
             const prevStoreQty = Number(
-              existingStoreRegisterRow.items.find((i) => i.key === "QTY")
-                ?.value || 0,
+              existingStoreRegisterRow.items.find((i) => i.key === "QTY")?.value || 0
             );
             diffQty = newStoreQty - prevStoreQty;
 
             const updateItem = (key, val) => {
-              const item = existingStoreRegisterRow.items.find(
-                (i) => i.key === key,
-              );
+              const item = existingStoreRegisterRow.items.find((i) => i.key === key);
               if (item) item.value = val;
             };
 
             updateItem("DATE", new Date().toISOString().split("T")[0]);
             updateItem(
               "ITEM CATEGORY",
-              items.find((i) => i.key === "ITEM CATEGORY")?.value || "",
+              items.find((i) => i.key === "ITEM CATEGORY")?.value || ""
             );
-            updateItem(
-              "ITEM CODE",
-              items.find((i) => i.key === "ITEM CODE")?.value || "",
-            );
-            updateItem(
-              "ITEM NAME",
-              items.find((i) => i.key === "ITEM NAME")?.value || "",
-            );
+            updateItem("ITEM CODE", items.find((i) => i.key === "ITEM CODE")?.value || "");
+            updateItem("ITEM NAME", items.find((i) => i.key === "ITEM NAME")?.value || "");
             updateItem(
               "VENDOR / CUSTOMER",
-              items.find((i) => i.key === "VENDOR NAME")?.value || "",
+              items.find((i) => i.key === "VENDOR NAME")?.value || ""
             );
             updateItem("QTY", newStoreQty.toString());
             updateItem(
               "DOC &REPORT NO",
-              currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")
-                ?.value || "",
+              currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")?.value || ""
             );
 
             storeRegisterProcess.updatedBy = userId;
@@ -2101,8 +2043,7 @@ exports.handleUpdateIntersection = async (
                 { key: "IN / OUT", value: "IN", process: "value" },
                 {
                   key: "ITEM CATEGORY",
-                  value:
-                    items.find((i) => i.key === "ITEM CATEGORY")?.value || "",
+                  value: items.find((i) => i.key === "ITEM CATEGORY")?.value || "",
                   process: "value",
                 },
                 {
@@ -2117,8 +2058,7 @@ exports.handleUpdateIntersection = async (
                 },
                 {
                   key: "VENDOR / CUSTOMER",
-                  value:
-                    items.find((i) => i.key === "VENDOR NAME")?.value || "",
+                  value: items.find((i) => i.key === "VENDOR NAME")?.value || "",
                   process: "value",
                 },
                 {
@@ -2129,8 +2069,7 @@ exports.handleUpdateIntersection = async (
                 {
                   key: "DOC &REPORT NO",
                   value:
-                    currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")
-                      ?.value || "",
+                    currentInwardRow?.items?.find((i) => i.key === "INVOICE NO")?.value || "",
                   process: "value",
                 },
               ],
@@ -2149,17 +2088,14 @@ exports.handleUpdateIntersection = async (
 
           // Find if stock entry for this item already exists
           const existingStockRow = stockDataProcess.data.find(
-            (r) =>
-              r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
+            (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode
           );
 
           if (existingStockRow) {
             // 🟢 Update existing stock entry incrementally using the diffQty
             const inItem = existingStockRow.items.find((i) => i.key === "IN");
             const outItem = existingStockRow.items.find((i) => i.key === "OUT");
-            const stockItem = existingStockRow.items.find(
-              (i) => i.key === "STOCK",
-            );
+            const stockItem = existingStockRow.items.find((i) => i.key === "STOCK");
 
             const currentIn = Number(inItem?.value || 0);
             const currentOut = Number(outItem?.value || 0);
@@ -2177,8 +2113,7 @@ exports.handleUpdateIntersection = async (
             // 🔵 Create new stock entry for this item
             const itemCategory =
               items.find((i) => i.key === "ITEM CATEGORY")?.value || "";
-            const itemName =
-              items.find((i) => i.key === "ITEM NAME")?.value || "";
+            const itemName = items.find((i) => i.key === "ITEM NAME")?.value || "";
 
             const newStockRow = {
               items: [
@@ -2187,11 +2122,7 @@ exports.handleUpdateIntersection = async (
                 { key: "ITEM NAME", value: itemName, process: "value" },
                 { key: "IN", value: newStoreQty.toString(), process: "value" },
                 { key: "OUT", value: "0", process: "value" },
-                {
-                  key: "STOCK",
-                  value: newStoreQty.toString(),
-                  process: "value",
-                },
+                { key: "STOCK", value: newStoreQty.toString(), process: "value" },
               ],
               rowDataId: row.rowDataId,
             };
@@ -2385,24 +2316,17 @@ exports.handleUpdateIntersection = async (
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
 
-      // ---- BREAK VALUES ----
-      const breakValues = calculateBreaks(start, end, sceduledLoss);
-      const totalBreakMinutes = Object.values(breakValues).reduce(
-        (acc, val) => acc + val,
-        0,
-      );
-
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime = end - start - breakValues - settings;
-      // Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-      // Number(
-      //   productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-      // );
+      const totalTime =
+        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
+        Number(
+          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
+        );
 
       const actualPlan =
-        (totalTime || 0) /
+        (totalTime) /
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
@@ -2445,6 +2369,9 @@ exports.handleUpdateIntersection = async (
       productionReportProcess.updatedBy = userId;
 
       await productionReportProcess.save();
+
+      // ---- BREAK VALUES ----
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
@@ -2526,7 +2453,9 @@ exports.handleUpdateIntersection = async (
 
       breakHourProcess.updatedBy = userId;
       await breakHourProcess.save();
-    } else if (process.processId === "MR/R/002") {
+    } 
+    
+    else if (process.processId === "MR/R/002") {
       const rowDataId = row.rowDataId;
       const rejectionReportProcess = await Process.findOne({
         processId: "MR/R/003",
@@ -2737,9 +2666,7 @@ exports.handleDeleteIntersection = async (
               r.rowDataId &&
               r.rowDataId.toString() === sourceRowId.toString()
             ) {
-              const qty = r.items.find(
-                (item) => item.key === "DELIVERY QTY",
-              )?.value;
+              const qty = r.items.find((item) => item.key === "DELIVERY QTY")?.value;
               return sum + Number(qty || 0);
             }
             return sum;
