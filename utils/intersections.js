@@ -818,7 +818,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         );
 
       const actualPlan =
-        (totalTime) /
+        (totalTime - (settings || 0)) /
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
@@ -2316,17 +2316,20 @@ exports.handleUpdateIntersection = async (
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
 
+      // ---- BREAK VALUES ----
+      const breakValues = calculateBreaks(start, end, sceduledLoss);
+
       const settings = items.find((i) => i.key === "SETTING TIME")?.value;
       const setupLoss = items.find((i) => i.key === "SET UP LOSS")?.value;
 
-      const totalTime =
-        Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
-        Number(
-          productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
-        );
+      const totalTime = (start - end) - breakValues - settings
+        // Number(productionReportRow.items.find((i) => i.key === "PLAN")?.value) *
+        // Number(
+        //   productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
+        // );
 
       const actualPlan =
-        (totalTime) /
+        (totalTime || 0) /
         Number(
           productionReportRow.items.find((i) => i.key === "CYCLE TIME")?.value,
         );
@@ -2370,8 +2373,7 @@ exports.handleUpdateIntersection = async (
 
       await productionReportProcess.save();
 
-      // ---- BREAK VALUES ----
-      const breakValues = calculateBreaks(start, end, sceduledLoss);
+      
 
       // ---- FINAL ROW ----
       const asVal = (k) => breakValues[k] || 0;
