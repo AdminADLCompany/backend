@@ -1856,6 +1856,32 @@ exports.getCalibrationDueDashboard = catchAsyncErrors(async (req, res, next) => 
   });
 });
 
+exports.getProcessControlPlanDashboard = catchAsyncErrors(async (req, res, next) => {
+  const pcpProcess = await Process.findOne({ processId: "QA/R/009" });
+
+  if (!pcpProcess) {
+    return next(new ErrorHandler("Process Control Plan Process (QA/R/009) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+  let filteredData = pcpProcess.data;
+
+  const totalRecords = filteredData.length;
+  const pendingRecordsData = filteredData.filter((row) => {
+    const fileUpload = row.items.find((i) => i.key === "FILE UPLOAD")?.value;
+    return fileUpload === "" || fileUpload === null;
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalRecords,
+      pendingCount: pendingRecordsData.length,
+      pendingRecords: pendingRecordsData,
+    },
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
