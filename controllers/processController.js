@@ -1741,6 +1741,82 @@ exports.getProductSuccessDashboard = catchAsyncErrors(async (req, res, next) => 
   });
 });
 
+exports.getMainSettings = catchAsyncErrors(async (req, res, next) => {
+  const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
+
+  if (!settingsProcess) {
+    return next(new ErrorHandler("Settings Process (MR/R/002A) not found", 404));
+  }
+
+  const filteredData = settingsProcess.data
+    .filter((row) => {
+      const status = row.items.find((i) => i.key === "STATUS")?.value;
+      return status?.toUpperCase() !== "CLOSED";
+    });
+
+  res.status(200).json({
+    success: true,
+    data: filteredData,
+  });
+});
+
+exports.getSettingsDashboard = catchAsyncErrors(async (req, res, next) => {
+  const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
+
+  if (!settingsProcess) {
+    return next(new ErrorHandler("Settings Process (MR/R/002A) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+  let filteredData = settingsProcess.data;
+
+  if (startDate && endDate) {
+    const start = Number(startDate);
+    const end = Number(endDate);
+    filteredData = filteredData.filter((row) => {
+      const dateItem = row.items.find((i) => i.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      return epochMs >= start && epochMs <= end;
+    });
+  }
+
+  let totalSettingTime = 0;
+  let totalSetupLoss = 0;
+  let settingTimeCount = 0;
+  let setupLossCount = 0;
+
+  filteredData.forEach((row) => {
+    const settingTimeItem = row.items.find((i) => i.key === "SETTING TIME");
+    const setupLossItem = row.items.find((i) => i.key === "SET UP LOSS");
+
+    if (settingTimeItem && settingTimeItem.value) {
+      const val = parseFloat(settingTimeItem.value);
+      if (!isNaN(val)) {
+        totalSettingTime += val;
+        settingTimeCount++;
+      }
+    }
+
+    if (setupLossItem && setupLossItem.value) {
+      const val = parseFloat(setupLossItem.value);
+      if (!isNaN(val)) {
+        totalSetupLoss += val;
+        setupLossCount++;
+      }
+    }
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      noOfSettings: filteredData.length,
+      averageSettingTime: settingTimeCount > 0 ? Number((totalSettingTime / settingTimeCount).toFixed(2)) : 0,
+      avgSetupLoss: setupLossCount > 0 ? Number((totalSetupLoss / setupLossCount).toFixed(2)) : 0,
+    },
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
