@@ -1882,6 +1882,67 @@ exports.getProcessControlPlanDashboard = catchAsyncErrors(async (req, res, next)
   });
 });
 
+exports.getCertificateRenewalDashboard = catchAsyncErrors(async (req, res, next) => {
+  const certificateProcess = await Process.findOne({ processId: "QA/R/011" });
+
+  if (!certificateProcess) {
+    return next(new ErrorHandler("Certificate Renewal Process (QA/R/011) not found", 404));
+  }
+
+  const { startDate, endDate } = req.query;
+  let filteredData = certificateProcess.data;
+
+  const results = filteredData.map((row) => {
+    const items = row.items;
+    const certName = items.find((i) => i.key === "CERTIFICATE NAME")?.value || "N/A";
+    const certNo = items.find((i) => i.key === "CERTIFICATE NO ")?.value || "N/A";
+    const department = items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
+    const status = items.find((i) => i.key === "CRS-STATUS")?.value || "N/A";
+
+    // Attempt to find any date fields for due calculation
+    const dateItem = items.find((i) => 
+      i.key.toLowerCase().includes("date") || 
+      i.key.toLowerCase().includes("expiry") || 
+      i.key.toLowerCase().includes("due")
+    );
+    
+    const epoch = dateItem ? Number(dateItem.value) : null;
+    let reminder = "No date set";
+    let isDue = false;
+
+    if (epoch && !isNaN(epoch)) {
+      const daysLeft = Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysLeft < 0) {
+        reminder = `${Math.abs(daysLeft)} days overdue`;
+        isDue = true;
+      } else if (daysLeft === 0) {
+        reminder = "Expires today";
+        isDue = true;
+      } else if (daysLeft <= 30) {
+        reminder = `Due in ${daysLeft} days`;
+        isDue = true;
+      } else {
+        reminder = `${daysLeft} days remaining`;
+      }
+    }
+
+    return {
+      certName,
+      certNo,
+      department,
+      status,
+      dueDate: epoch,
+      reminder,
+      isDue
+    };
+  });
+
+  res.status(200).json({
+    success: true,
+    data: results,
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });

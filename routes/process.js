@@ -50,7 +50,8 @@ const {
   getMainSettings,
   getSettingsDashboard,
   getCalibrationDueDashboard,
-  getProcessControlPlanDashboard
+  getProcessControlPlanDashboard,
+  getCertificateRenewalDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -68,6 +69,7 @@ router.route('/main/sales/orderList').get(getMainOrderListDashboard);
 router.route('/main/sales/dockets').get(getMainDocketsDashboard);
 router.route('/main/quality/calibrationdue').get(getCalibrationDueDashboard);
 router.route('/main/quality/processControlPlan').get(getProcessControlPlanDashboard);
+router.route('/main/quality/certificateRenewal').get(getCertificateRenewalDashboard);
 router.route('/main/manufacturing/settingsHour').get(getMainSettings);
 
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
