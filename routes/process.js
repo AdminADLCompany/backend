@@ -48,7 +48,8 @@ const {
   getMainDocketsDashboard,
   getProductSuccessDashboard,
   getMainSettings,
-  getSettingsDashboard
+  getSettingsDashboard,
+  getCalibrationDueDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -64,6 +65,7 @@ router.route('/main/design/productList').get(getMainProductListDashboard);
 router.route('/main/design/revisionControl').get(getMainRevisionControlDashboard);
 router.route('/main/sales/orderList').get(getMainOrderListDashboard);
 router.route('/main/sales/dockets').get(getMainDocketsDashboard);
+router.route('/main/quality/calibrationdue').get(getCalibrationDueDashboard);
 router.route('/main/manufacturing/settingsHour').get(getMainSettings);
 
 router.route('/design/npdRegister').get(getNPDDashboardDetails);

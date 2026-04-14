@@ -1817,6 +1817,45 @@ exports.getSettingsDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+exports.getCalibrationDueDashboard = catchAsyncErrors(async (req, res, next) => {
+  const calibrationProcess = await Process.findOne({ processId: "QA/R/002A" });
+
+  if (!calibrationProcess) {
+    return next(new ErrorHandler("Calibration Process (QA/R/002A) not found", 404));
+  }
+
+  const filteredCalibration = calibrationProcess.data.filter((row) => {
+    const certificate = row.items.find((item) => item.key === "CERTIFICATE")?.value;
+    const date = row.items.find((item) => item.key === "DATE")?.value || row.items.find((item) => item.key === "DUE")?.value; // Supporting both DATE and DUE keys
+    
+    return (
+      certificate === "" ||
+      certificate === null ||
+      (date && Number(date) <= Date.now() - 10 * 24 * 60 * 60 * 1000)
+    );
+  });
+
+  const doneCount = filteredCalibration.filter((row) => {
+    const status = row.items.find((item) => item.key === "DONE")?.value;
+    return status?.toString().toLowerCase() === "done";
+  }).length;
+
+  const dueCount = filteredCalibration.filter((row) => {
+    const status = row.items.find((item) => item.key === "DONE")?.value;
+    return status?.toString().toLowerCase() === "due";
+  }).length;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalFiltered: filteredCalibration.length,
+      doneCount,
+      dueCount,
+      openRecords: filteredCalibration,
+    },
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
