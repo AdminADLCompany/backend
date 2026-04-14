@@ -45,7 +45,8 @@ const {
   getMainProductListDashboard,
   getMainRevisionControlDashboard,
   getMainOrderListDashboard,
-  getMainDocketsDashboard
+  getMainDocketsDashboard,
+  getProductSuccessDashboard
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
@@ -65,6 +66,7 @@ router.route('/main/sales/dockets').get(getMainDocketsDashboard);
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
 router.route('/design/productsDashboard').get(getProductDashboard);
 router.route('/design/revisionControl').get(getRevisionControlDashboard);
+router.route('/design/productSuccess').get(getProductSuccessDashboard);
 router.route('/manufacturing/oeeDashboard').get(getOEEDashboard);
 router.route('/manufacturing/productionReportDashboard').get(getDashboardProductReport);
 router.route('/manufacturing/inhouseDashboard').get(getInhouseDashboard);

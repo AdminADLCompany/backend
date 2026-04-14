@@ -1702,6 +1702,45 @@ exports.getMainDocketsDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+exports.getProductSuccessDashboard = catchAsyncErrors(async (req, res, next) => {
+  const productSuccessProcess = await Process.findOne({ processId: "DD/R/007" });
+
+  if (!productSuccessProcess) {
+    return next(new ErrorHandler("Product Success Process (DD/R/007) not found", 404));
+  }
+
+  const filteredData = productSuccessProcess.data
+    .filter((row) => {
+      const status = row.items.find((i) => i.key === "STATUS")?.value;
+      return status?.toUpperCase() !== "CLOSED";
+    });
+
+  let totalSuccessRate = 0;
+  let count = 0;
+
+  filteredData.forEach((row) => {
+    const successRateItem = row.items.find((i) => i.key === "SUCCESS RATE");
+    if (successRateItem && successRateItem.value) {
+      const val = parseFloat(successRateItem.value);
+      if (!isNaN(val)) {
+        totalSuccessRate += val;
+        count++;
+      }
+    }
+  });
+
+  const avgSuccessRate = count > 0 ? totalSuccessRate / count : 0;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalOpen: filteredData.length,
+      avgSuccessRate: Number(avgSuccessRate.toFixed(2)),
+      openRecords: filteredData,
+    },
+  });
+});
+
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
