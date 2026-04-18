@@ -20,7 +20,19 @@ const {
   getProcessRowHistory,
   getProductDetails,
   deleteAllProcessData,
-  getMainDashBoardDetails,
+  getDashboardProductionPlan,
+  getDashboardProductionReport,
+  getDashboardRejectReport,
+  getDashboardReworkReport,
+  getDashboardDispatch,
+  getDashboardCalibration,
+  getDashboardIncomingInspection,
+  getDashboardCustomerComplaints,
+  getDashboardCustomerList,
+  getDashboardQuotationList,
+  getDashboardOrderList,
+  getDashboardProcurement,
+  getDashboardStock,
   getNPDDashboardDetails,
   getProductDashboard,
   getRevisionControlDashboard,
@@ -55,10 +67,21 @@ const {
 } = require("../controllers/processController");
 
 router.route("/deleteAllData").delete(deleteAllProcessData);
-router
-  .route("/dashboard")
-  .get(getMainDashBoardDetails)
-  .post(getMainDashBoardDetails);
+
+// Individual Dashboard Routes
+router.route("/dashboard/production-plan").get(getDashboardProductionPlan);
+router.route("/dashboard/production-report").get(getDashboardProductionReport);
+router.route("/dashboard/reject-report").get(getDashboardRejectReport);
+router.route("/dashboard/rework-report").get(getDashboardReworkReport);
+router.route("/dashboard/dispatch").get(getDashboardDispatch);
+router.route("/dashboard/calibration").get(getDashboardCalibration);
+router.route("/dashboard/incoming-inspection").get(getDashboardIncomingInspection);
+router.route("/dashboard/customer-complaints").get(getDashboardCustomerComplaints);
+router.route("/dashboard/customer-list").get(getDashboardCustomerList);
+router.route("/dashboard/quotation-list").get(getDashboardQuotationList);
+router.route("/dashboard/order-list").get(getDashboardOrderList);
+router.route("/dashboard/procurement").get(getDashboardProcurement);
+router.route("/dashboard/stock").get(getDashboardStock);
 router.route("/all").get(isAuthenticatedUser, getAllProcesses);
 router.route("/search").get(isAuthenticatedUser, getProductDetails);
 

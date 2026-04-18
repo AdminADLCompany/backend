@@ -1002,539 +1002,277 @@ exports.deleteAllProcessData = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-exports.getMainDashBoardDetails = catchAsyncErrors(async (req, res, next) => {
-  const [
-    productionPlanProcess,
-    productionReportProcess,
-    rejectReportProcess,
-    reworkReportProcess,
-    dispatchProcess,
-    npdRegisterProcess,
-    productsProcess,
-    calibrationReportProcess,
-    incomingInspectionProcess,
-    customerComplientRegisterProcess,
-    customerListProcess,
-    quotationListProcess,
-    orderListProcess,
-    procurementProcess,
-    stockDataProcess,
-  ] = await Promise.all([
-    Process.findOne({ processId: "MR/R/001" }),
-    Process.findOne({ processId: "MR/R/002" }),
+// ─── Individual Dashboard Controllers ───────────────────────────────────────
+// Each controller fetches only the data for its own section.
+
+// GET /dashboard/production-plan
+exports.getDashboardProductionPlan = catchAsyncErrors(async (req, res, next) => {
+  const { startDate, endDate } = req.query ?? {};
+  const now = new Date();
+  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
+  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+
+  const productionPlanProcess = await Process.findOne({ processId: "MR/R/001" });
+  if (!productionPlanProcess) return res.status(200).json({ success: true, data: {} });
+
+  const pendingDetails = productionPlanProcess.data.filter((row) => {
+    return (
+      row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !== "completed" &&
+      row.items.find((item) => item.key === "INCOMING INSPECTION")?.value?.toLowerCase() !== "completed" &&
+      row.items.find((item) => item.key === "MACHINE")?.value?.toLowerCase() !== "completed" &&
+      row.items.find((item) => item.key === "ASSEMBLY")?.value?.toLowerCase() !== "completed" &&
+      row.items.find((item) => item.key === "OUT PROCESS")?.value?.toLowerCase() !== "completed"
+    );
+  });
+
+  const reportGraph = [];
+  productionPlanProcess.data.forEach((row) => {
+    const partNo = row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
+    const planQty = Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
+    reportGraph.push({ partNo, planQty });
+  });
+
+  const totalPlanQty = productionPlanProcess.data.reduce((acc, row) => {
+    return acc + (Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0);
+  }, 0);
+
+  res.status(200).json({ success: true, data: { pendingDetails, reportGraph, totalPlanQty } });
+});
+
+// GET /dashboard/production-report
+exports.getDashboardProductionReport = catchAsyncErrors(async (req, res, next) => {
+  const { startDate, endDate } = req.query ?? {};
+  const now = new Date();
+  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
+  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+
+  const productionReportProcess = await Process.findOne({ processId: "MR/R/002" });
+  if (!productionReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0 } });
+
+  const filteredRows = productionReportProcess.data.filter((row) => {
+    const dateItem = row.items.find((item) => item.key === "DATE");
+    if (!dateItem || !dateItem.value) return false;
+    const epochMs = Number(dateItem.value);
+    if (isNaN(epochMs)) return false;
+    return epochMs >= effectiveStart && epochMs <= effectiveEnd;
+  });
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredRows.length } });
+});
+
+// GET /dashboard/reject-report
+exports.getDashboardRejectReport = catchAsyncErrors(async (req, res, next) => {
+  const [rejectReportProcess, productionReportProcess, actionTakenProcess] = await Promise.all([
     Process.findOne({ processId: "MR/R/003" }),
-    Process.findOne({ processId: "MR/R/003A" }),
-    Process.findOne({ processId: "MR/R/006" }),
-    Process.findOne({ processId: "DD/R/010" }),
-    Process.findOne({ processId: "DD/R/002A" }),
-    Process.findOne({ processId: "QA/R/002A" }),
-    Process.findOne({ processId: "QA/R/003" }),
-    Process.findOne({ processId: "QA/R/007" }),
-    Process.findOne({ processId: "MS/R/004" }),
-    Process.findOne({ processId: "MS/R/005" }),
-    Process.findOne({ processId: "MS/R/006" }),
-    Process.findOne({ processId: "PR/R/003" }),
-    Process.findOne({ processId: "ST/R/006" }),
+    Process.findOne({ processId: "MR/R/002" }),
+    Process.findOne({ processId: "MR/R/003B" }),
   ]);
 
-  const { startDate, endDate, salesPerson, location } = req.body ?? {};
+  if (!rejectReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], chartResult: 0 } });
 
-  // Default date range: Jan 1 of the current year → Dec 31 of next year
+  const openData = actionTakenProcess
+    ? actionTakenProcess.data.filter((row) =>
+        row.items.find((item) => item.key === "ACTION PLAN STATUS")?.value?.toLowerCase() === "open"
+      )
+    : [];
+
+  const resultData = rejectReportProcess.data.filter((row) =>
+    openData.some((openRow) => openRow.rowDataId?.toString() === row._id.toString())
+  );
+
+  let chartResult = 0;
+  if (productionReportProcess && productionReportProcess.data.length > 0) {
+    const sumOfReject = rejectReportProcess.data.reduce((acc, row) =>
+      acc + (Number(row.items.find((item) => item.key === "REJECT QTY")?.value) || 0), 0);
+    const sumOfActual = productionReportProcess.data.reduce((acc, row) =>
+      acc + (Number(row.items.find((item) => item.key === "ACTUAL QTY")?.value) || 0), 0);
+    chartResult = sumOfActual > 0 ? sumOfReject / sumOfActual : 0;
+  }
+
+  res.status(200).json({ success: true, data: { totalFiltered: resultData.length, data: resultData, chartResult } });
+});
+
+// GET /dashboard/rework-report
+exports.getDashboardReworkReport = catchAsyncErrors(async (req, res, next) => {
+  const reworkReportProcess = await Process.findOne({ processId: "MR/R/003A" });
+  if (!reworkReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+
+  const openData = reworkReportProcess.data.filter((row) =>
+    row.items.find((item) => item.key === "RR STATUS")?.value?.toLowerCase() === "open"
+  );
+
+  res.status(200).json({ success: true, data: { totalFiltered: openData.length, data: openData } });
+});
+
+// GET /dashboard/dispatch
+exports.getDashboardDispatch = catchAsyncErrors(async (req, res, next) => {
+  const { startDate, endDate } = req.query ?? {};
   const now = new Date();
-  const effectiveStart = startDate
-    ? Number(startDate)
-    : new Date(now.getFullYear(), 0, 1).getTime(); // Jan 1, this year
-  const effectiveEnd = endDate
-    ? Number(endDate)
-    : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime(); // Dec 31, next year
+  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
+  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
 
-  let response = [];
+  const dispatchProcess = await Process.findOne({ processId: "MR/R/006" });
+  if (!dispatchProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalQuantity: 0, graphChart: { monthWise: [], yearWise: [] } } });
 
-  // productionPlanProcess
-  if (productionPlanProcess) {
-    // only Pending Details need to be displayed.
-    const pendingDetails = productionPlanProcess.data.filter((row) => {
-      return (
-        row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !==
-          "completed" &&
-        row.items
-          .find((item) => item.key === "INCOMING INSPECTION")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "MACHINE")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "ASSEMBLY")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "OUT PROCESS")
-          ?.value?.toLowerCase() !== "completed"
-      );
-    });
-    // plan qty(y-axis) need to display based on part no(x-axis)
-    let reportGraph = [];
-    productionPlanProcess.data.forEach((row) => {
-      const partNo =
-        row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
-      const planQty =
-        Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
-      reportGraph.push({ partNo, planQty });
-    });
-
-    response.push({
-      productionPlanProcess: {
-        pendingDetails: pendingDetails,
-        reportGraph: reportGraph,
-        totalPlanQty: productionPlanProcess.data.reduce((acc, row) => {
-          return (
-            acc +
-              Number(
-                row.items.find((item) => item.key === "PLAN QTY")?.value,
-              ) || 0
-          );
-        }, 0),
-      },
-    });
-  }
-
-  // productionReportProcess
-  if (productionReportProcess) {
-    const resolvedProductionReport = productionReportProcess;
-
-    const filteredRows = resolvedProductionReport.data.filter((row) => {
-      const dateItem = row.items.find((item) => item.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-
-      const epochMs = Number(dateItem.value);
-      if (isNaN(epochMs)) return false;
-
-      if (epochMs < effectiveStart) return false;
-      if (epochMs > effectiveEnd) return false;
-      return true;
-    });
-
-    response.push({
-      productionReportProcess: {
-        totalFiltered: filteredRows.length,
-      },
-    });
-  }
-
-  // rejectReportProcess
-  if (rejectReportProcess) {
-    const actionTakenProcess = await Process.findOne({
-      processId: "MR/R/003B",
-    });
-
-    const openData = actionTakenProcess
-      ? actionTakenProcess.data.filter((row) => {
-          return (
-            row.items
-              .find((item) => item.key === "ACTION PLAN STATUS")
-              ?.value?.toLowerCase() === "open"
-          );
-        })
-      : [];
-
-    // map the filters data object rowDataId with the rejectReportProcess data _id
-    const resultData = rejectReportProcess.data.filter((row) => {
-      return openData.some(
-        (openRow) => openRow.rowDataId?.toString() === row._id.toString(),
-      );
-    });
-
-    let chartResult = 0;
-
-    if (productionReportProcess && productionReportProcess.data.length > 0) {
-      const sumOfReject = rejectReportProcess.data.reduce((acc, row) => {
-        const rejectQty =
-          Number(row.items.find((item) => item.key === "REJECT QTY")?.value) ||
-          0;
-        return acc + rejectQty;
-      }, 0);
-
-      const sumOfActual = productionReportProcess.data.reduce((acc, row) => {
-        const actualQty =
-          Number(row.items.find((item) => item.key === "ACTUAL QTY")?.value) ||
-          0;
-        return acc + actualQty;
-      }, 0);
-
-      chartResult = sumOfActual > 0 ? sumOfReject / sumOfActual : 0;
-    }
-
-    response.push({
-      rejectReportProcess: {
-        totalFiltered: resultData.length,
-        data: resultData,
-        chartResult: chartResult,
-      },
-    });
-  }
-
-  // reworkReportProcess
-  if (reworkReportProcess) {
-    // filter the open status
-    const openData = reworkReportProcess.data.filter((row) => {
-      return (
-        row.items
-          .find((item) => item.key === "RR STATUS")
-          ?.value?.toLowerCase() === "open"
-      );
-    });
-
-    response.push({
-      reworkReportProcess: {
-        totalFiltered: openData.length,
-        data: openData,
-      },
-    });
-  }
-
-  // dispatchProcess
-  if (dispatchProcess) {
-    const resolvedDispatch = dispatchProcess;
-
-    const filteredRows = resolvedDispatch.data.filter((row) => {
-      const dateItem = row.items.find((item) => item.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-
-      const epochMs = Number(dateItem.value);
-      if (isNaN(epochMs)) return false;
-
-      if (epochMs < effectiveStart) return false;
-      if (epochMs > effectiveEnd) return false;
-      return true;
-    });
-
-    const data = filteredRows.map((row) => {
-      return {
-        partNo:
-          row.items.find((item) => item.key === "PART-NO")?.value || "N/A",
-        qty: Number(row.items.find((item) => item.key === "QTY")?.value) || 0,
-        date: row.items.find((item) => item.key === "DATE")?.value || null,
-      };
-    });
-
-    // Aggregate month-wise and year-wise QTY
-    const monthMap = {};
-    const yearMap = {};
-
-    filteredRows.forEach((row) => {
-      const dateItem = row.items.find((item) => item.key === "DATE");
-      const epochMs = Number(dateItem.value);
-      const qty =
-        Number(row.items.find((item) => item.key === "QTY")?.value) || 0;
-      const d = new Date(epochMs);
-
-      const year = d.getUTCFullYear();
-      const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const monthKey = `${year}-${month}`;
-
-      monthMap[monthKey] = (monthMap[monthKey] || 0) + qty;
-      yearMap[year] = (yearMap[year] || 0) + qty;
-    });
-
-    const monthWise = Object.entries(monthMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, qty]) => ({ label, qty }));
-
-    const yearWise = Object.entries(yearMap)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([label, qty]) => ({ label: String(label), qty }));
-
-    response.push({
-      dispatchProcess: {
-        totalFiltered: filteredRows.length,
-        data: data,
-        totalQuantity: filteredRows.reduce((acc, row) => {
-          return (
-            acc +
-            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
-          );
-        }, 0),
-        graphChart: {
-          monthWise,
-          yearWise,
-        },
-      },
-    });
-  }
-
-  // npdRegisterProcess  ── DD/R/010  (NPD Register)
-  // DATE field stores epoch timestamp as a string (e.g. "1772582400000")
-  // Filter rows whose DATE falls within [startDate, endDate] (both as epoch ms numbers)
-  // then group by month and year to return counts.
-  if (npdRegisterProcess) {
-    const resolvedNpd = npdRegisterProcess;
-
-    // ── filter rows by DATE field ──────────────────────────────────────────
-    const filteredRows = resolvedNpd.data.filter((row) => {
-      const dateItem = row.items.find((item) => item.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-
-      const epochMs = Number(dateItem.value);
-      if (isNaN(epochMs)) return false;
-
-      if (epochMs < effectiveStart) return false;
-      if (epochMs > effectiveEnd) return false;
-      return true;
-    });
-
-    // ── aggregate month-wise  { label: "2025-09", count: N } ──────────────
-    const monthMap = {};
-    const yearMap = {};
-
-    filteredRows.forEach((row) => {
-      const dateItem = row.items.find((item) => item.key === "DATE");
-      const epochMs = Number(dateItem.value);
-      const d = new Date(epochMs);
-
-      const year = d.getUTCFullYear();
-      const month = String(d.getUTCMonth() + 1).padStart(2, "0"); // 01-12
-      const monthKey = `${year}-${month}`;
-
-      monthMap[monthKey] = (monthMap[monthKey] || 0) + 1;
-      yearMap[year] = (yearMap[year] || 0) + 1;
-    });
-
-    // Convert to sorted arrays
-    const monthWise = Object.entries(monthMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, count]) => ({ label, count }));
-
-    const yearWise = Object.entries(yearMap)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([label, count]) => ({ label: String(label), count }));
-
-    response.push({
-      npdRegisterProcess: {
-        totalFiltered: filteredRows.length,
-        monthWise,
-        yearWise,
-      },
-    });
-  }
-
-  // productsProcess
-  if (productsProcess) {
-    // Need the count of the occurance of the PART NO
-    const resolvedProducts = productsProcess;
-    const partNoCount = resolvedProducts.data.reduce((acc, row) => {
-      const partNo =
-        row.items.find((item) => item.key === "PART NO")?.value || "Unknown";
-      acc[partNo] = (acc[partNo] || 0) + 1;
-      return acc;
-    }, {});
-
-    response.push({
-      productsProcess: {
-        partNoCount,
-      },
-    });
-  }
-
-  // calibrationReportProcess
-  if (calibrationReportProcess) {
-    // filter the data of cartificate === '' or null and date shoudl be 10 lesser than or equal to todays date
-    const resolvedCalibration = calibrationReportProcess;
-    const filteredCalibration = resolvedCalibration.data.filter((row) => {
-      const certificate = row.items.find(
-        (item) => item.key === "CERTIFICATE",
-      )?.value;
-      const date = row.items.find((item) => item.key === "DATE")?.value;
-      return (
-        certificate === "" ||
-        certificate === null ||
-        date <= Date.now() - 10 * 24 * 60 * 60 * 1000
-      );
-    });
-    // give the count of done and due "DONE" == 'Done' || 'Due'
-    const doneCount = filteredCalibration.filter((row) => {
-      const status = row.items.find((item) => item.key === "DONE")?.value;
-      return status?.toLowerCase() === "done";
-    }).length;
-    const dueCount = filteredCalibration.filter((row) => {
-      const status = row.items.find((item) => item.key === "DONE")?.value;
-      return status?.toLowerCase() === "due";
-    }).length;
-    response.push({
-      calibrationReportProcess: {
-        totalFiltered: filteredCalibration.length,
-        data: filteredCalibration,
-        doneCount,
-        dueCount,
-      },
-    });
-  }
-
-  // incomingInspectionProcess
-  if (incomingInspectionProcess) {
-    const resolvedInspection = incomingInspectionProcess;
-
-    // filter the data of STatus != done
-    const filteredInspection = resolvedInspection.data.filter((row) => {
-      const status = row.items.find(
-        (item) => item.key === "INSPECTION-STATUS",
-      )?.value;
-      return status?.toLowerCase() !== "done";
-    });
-    response.push({
-      incomingInspectionProcess: {
-        totalFiltered: filteredInspection.length,
-        data: filteredInspection,
-      },
-    });
-  }
-
-  // customerComplientRegisterProcess
-  if (customerComplientRegisterProcess) {
-    const resolvedCustomer = customerComplientRegisterProcess;
-
-    // supplied qty , failed qty = f QTY/ s QTY month vise year vise.
-    const filteredCustomer = resolvedCustomer.data.map((row) => {
-      const suppliedQty = row.items.find(
-        (item) => item.key === "SUPPLIED QTY",
-      )?.value;
-      const failedQty = row.items.find(
-        (item) => item.key === "FAILED QTY",
-      )?.value;
-      const date = row.items.find((item) => item.key === "DATE")?.value;
-      return { ratio: suppliedQty ? failedQty / suppliedQty : 0, date };
-    });
-    response.push({
-      customerComplientRegisterProcess: {
-        totalFiltered: filteredCustomer.length,
-        data: filteredCustomer,
-      },
-    });
-  }
-
-  // customerListProcess
-  if (customerListProcess) {
-    // total record count. filter by sales Person & Location (pass-all when not provided)
-    const resolvedCustomer = customerListProcess;
-    const filteredCustomer = resolvedCustomer.data.filter((row) => {
-      const salesPersonValue = row.items.find(
-        (item) => item.key === "SALES PERSON",
-      )?.value;
-      const locationValue = row.items.find(
-        (item) => item.key === "LOCATION",
-      )?.value;
-      // Handle empty string or null as 'no filter'
-      const matchSales =
-        !salesPerson ||
-        salesPerson === "" ||
-        salesPersonValue?.toLowerCase() === salesPerson.toLowerCase();
-      const matchLocation =
-        !location ||
-        location === "" ||
-        locationValue?.toLowerCase() === location.toLowerCase();
-      return matchSales && matchLocation;
-    });
-    response.push({
-      customerListProcess: {
-        totalFiltered: filteredCustomer.length,
-        data: filteredCustomer,
-      },
-    });
-  }
-
-  // quotationListProcess
-  if (quotationListProcess) {
-    // count of waiting for quote, waiting for order
-    const resolvedQuotation = quotationListProcess;
-    const filteredQuotation = resolvedQuotation.data.filter((row) => {
-      const status = row.items
-        .find((item) => item.key === "QL STATUS")
-        ?.value?.toLowerCase();
-      return status === "waiting for quote" || status === "waiting for order";
-    });
-    response.push({
-      quotationListProcess: {
-        totalFiltered: filteredQuotation.length,
-        data: filteredQuotation,
-      },
-    });
-  }
-
-  // orderListProcess
-  if (orderListProcess) {
-    // filter != closed status
-    const resolvedOrder = orderListProcess;
-    const filteredOrder = resolvedOrder.data.filter((row) => {
-      const status = row.items.find((item) => item.key === "STATUS")?.value;
-      return status?.toLowerCase() !== "closed";
-    });
-    response.push({
-      orderListProcess: {
-        totalFiltered: filteredOrder.length,
-        data: filteredOrder,
-        totalOrderQty: filteredOrder.reduce((acc, row) => {
-          return (
-            acc +
-            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
-          );
-        }, 0),
-      },
-    });
-  }
-
-  // procurementProcess
-  if (procurementProcess) {
-    const resolvedProcurement = procurementProcess;
-    // return pending qty and return data of payment pending
-    const filteredProcurement = resolvedProcurement.data.filter((row) => {
-      const status = row.items.find((item) => item.key === "PR STATUS")?.value;
-      return status?.toLowerCase() === "pending";
-    });
-
-    response.push({
-      procurementProcess: {
-        totalFiltered: filteredProcurement.length,
-        data: filteredProcurement,
-        totalPendingQty: filteredProcurement.reduce((acc, row) => {
-          return (
-            acc +
-            (Number(row.items.find((item) => item.key === "QTY")?.value) || 0)
-          );
-        }, 0),
-      },
-    });
-  }
-
-  // stockDataProcess
-  if (stockDataProcess) {
-    // filter the data of ITEM CATEGORY === 'FINISHED GOOD'
-    const resolvedStock = stockDataProcess;
-    const filteredStock = resolvedStock.data.filter((row) => {
-      const itemCategory = row.items.find(
-        (item) => item.key === "ITEM CATEGORY",
-      )?.value;
-      return (
-        itemCategory?.toLowerCase() === "finished good" ||
-        itemCategory?.toLowerCase() === "finsihed good"
-      );
-    });
-
-    response.push({
-      stockDataProcess: {
-        totalFiltered: filteredStock.length,
-        data: filteredStock,
-        totalStockQty: filteredStock.reduce((acc, row) => {
-          return (
-            acc +
-            (Number(row.items.find((item) => item.key === "STOCK")?.value) || 0)
-          );
-        }, 0),
-      },
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    data: response,
+  const filteredRows = dispatchProcess.data.filter((row) => {
+    const dateItem = row.items.find((item) => item.key === "DATE");
+    if (!dateItem || !dateItem.value) return false;
+    const epochMs = Number(dateItem.value);
+    if (isNaN(epochMs)) return false;
+    return epochMs >= effectiveStart && epochMs <= effectiveEnd;
   });
+
+  const data = filteredRows.map((row) => ({
+    partNo: row.items.find((item) => item.key === "PART-NO")?.value || "N/A",
+    qty: Number(row.items.find((item) => item.key === "QTY")?.value) || 0,
+    date: row.items.find((item) => item.key === "DATE")?.value || null,
+  }));
+
+  const monthMap = {};
+  const yearMap = {};
+  filteredRows.forEach((row) => {
+    const epochMs = Number(row.items.find((item) => item.key === "DATE")?.value);
+    const qty = Number(row.items.find((item) => item.key === "QTY")?.value) || 0;
+    const d = new Date(epochMs);
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const monthKey = `${year}-${month}`;
+    monthMap[monthKey] = (monthMap[monthKey] || 0) + qty;
+    yearMap[year] = (yearMap[year] || 0) + qty;
+  });
+
+  const monthWise = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([label, qty]) => ({ label, qty }));
+  const yearWise = Object.entries(yearMap).sort(([a], [b]) => Number(a) - Number(b)).map(([label, qty]) => ({ label: String(label), qty }));
+  const totalQuantity = filteredRows.reduce((acc, row) => acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredRows.length, data, totalQuantity, graphChart: { monthWise, yearWise } } });
+});
+
+// GET /dashboard/calibration
+exports.getDashboardCalibration = catchAsyncErrors(async (req, res, next) => {
+  const calibrationReportProcess = await Process.findOne({ processId: "QA/R/002A" });
+  if (!calibrationReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], doneCount: 0, dueCount: 0 } });
+
+  const filteredCalibration = calibrationReportProcess.data.filter((row) => {
+    const certificate = row.items.find((item) => item.key === "CERTIFICATE")?.value;
+    const date = row.items.find((item) => item.key === "DATE")?.value;
+    return certificate === "" || certificate === null || date <= Date.now() - 10 * 24 * 60 * 60 * 1000;
+  });
+
+  const doneCount = filteredCalibration.filter((row) =>
+    row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() === "done"
+  ).length;
+  const dueCount = filteredCalibration.filter((row) =>
+    row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() === "due"
+  ).length;
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredCalibration.length, data: filteredCalibration, doneCount, dueCount } });
+});
+
+// GET /dashboard/incoming-inspection
+exports.getDashboardIncomingInspection = catchAsyncErrors(async (req, res, next) => {
+  const incomingInspectionProcess = await Process.findOne({ processId: "QA/R/003" });
+  if (!incomingInspectionProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+
+  const filteredInspection = incomingInspectionProcess.data.filter((row) => {
+    const status = row.items.find((item) => item.key === "INSPECTION-STATUS")?.value;
+    return status?.toLowerCase() !== "done";
+  });
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredInspection.length, data: filteredInspection } });
+});
+
+// GET /dashboard/customer-complaints
+exports.getDashboardCustomerComplaints = catchAsyncErrors(async (req, res, next) => {
+  const customerComplientRegisterProcess = await Process.findOne({ processId: "QA/R/007" });
+  if (!customerComplientRegisterProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+
+  const filteredCustomer = customerComplientRegisterProcess.data.map((row) => {
+    const suppliedQty = row.items.find((item) => item.key === "SUPPLIED QTY")?.value;
+    const failedQty = row.items.find((item) => item.key === "FAILED QTY")?.value;
+    const date = row.items.find((item) => item.key === "DATE")?.value;
+    return { ratio: suppliedQty ? failedQty / suppliedQty : 0, date };
+  });
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredCustomer.length, data: filteredCustomer } });
+});
+
+// GET /dashboard/customer-list
+exports.getDashboardCustomerList = catchAsyncErrors(async (req, res, next) => {
+  const { salesPerson, location } = req.query ?? {};
+  const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
+  if (!customerListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+
+  const filteredCustomer = customerListProcess.data.filter((row) => {
+    const salesPersonValue = row.items.find((item) => item.key === "SALES PERSON")?.value;
+    const locationValue = row.items.find((item) => item.key === "LOCATION")?.value;
+    const matchSales = !salesPerson || salesPerson === "" || salesPersonValue?.toLowerCase() === salesPerson.toLowerCase();
+    const matchLocation = !location || location === "" || locationValue?.toLowerCase() === location.toLowerCase();
+    return matchSales && matchLocation;
+  });
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredCustomer.length, data: filteredCustomer } });
+});
+
+// GET /dashboard/quotation-list
+exports.getDashboardQuotationList = catchAsyncErrors(async (req, res, next) => {
+  const quotationListProcess = await Process.findOne({ processId: "MS/R/005" });
+  if (!quotationListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+
+  const filteredQuotation = quotationListProcess.data.filter((row) => {
+    const status = row.items.find((item) => item.key === "QL STATUS")?.value?.toLowerCase();
+    return status === "waiting for quote" || status === "waiting for order";
+  });
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredQuotation.length, data: filteredQuotation } });
+});
+
+// GET /dashboard/order-list
+exports.getDashboardOrderList = catchAsyncErrors(async (req, res, next) => {
+  const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
+  if (!orderListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalOrderQty: 0 } });
+
+  const filteredOrder = orderListProcess.data.filter((row) => {
+    const status = row.items.find((item) => item.key === "STATUS")?.value;
+    return status?.toLowerCase() !== "closed";
+  });
+
+  const totalOrderQty = filteredOrder.reduce((acc, row) =>
+    acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredOrder.length, data: filteredOrder, totalOrderQty } });
+});
+
+// GET /dashboard/procurement
+exports.getDashboardProcurement = catchAsyncErrors(async (req, res, next) => {
+  const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+  if (!procurementProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalPendingQty: 0 } });
+
+  const filteredProcurement = procurementProcess.data.filter((row) => {
+    const status = row.items.find((item) => item.key === "PR STATUS")?.value;
+    return status?.toLowerCase() === "pending";
+  });
+
+  const totalPendingQty = filteredProcurement.reduce((acc, row) =>
+    acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredProcurement.length, data: filteredProcurement, totalPendingQty } });
+});
+
+// GET /dashboard/stock
+exports.getDashboardStock = catchAsyncErrors(async (req, res, next) => {
+  const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
+  if (!stockDataProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalStockQty: 0 } });
+
+  const filteredStock = stockDataProcess.data.filter((row) => {
+    const itemCategory = row.items.find((item) => item.key === "ITEM CATEGORY")?.value;
+    return itemCategory?.toLowerCase() === "finished good" || itemCategory?.toLowerCase() === "finsihed good";
+  });
+
+  const totalStockQty = filteredStock.reduce((acc, row) =>
+    acc + (Number(row.items.find((item) => item.key === "STOCK")?.value) || 0), 0);
+
+  res.status(200).json({ success: true, data: { totalFiltered: filteredStock.length, data: filteredStock, totalStockQty } });
 });
 
 exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) => {
