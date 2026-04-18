@@ -362,7 +362,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
       const successRate = items.find((i) => i.key === "SUCCESS RATE");
       if (successRate)
-        successRate.value = String((Number(qtyReturned) / Number(qtySold)) * 100);
+        successRate.value = String(100 - (Number(qtyReturned) / Number(qtySold) * 100))
     }
 
     else if (process.processId === "PR/R/003A") {
@@ -578,7 +578,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
       const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
       const successRate = items.find((i) => i.key === "SUCCESS RATE");
       if (successRate)
-        successRate.value = String((Number(qtyReturned) / Number(qtySold)) * 100);
+        successRate.value = String(100 - (Number(qtyReturned) / Number(qtySold) * 100));
   }
 
   else if (process.processId === "MS/R/006A") {
