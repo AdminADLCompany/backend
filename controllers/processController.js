@@ -1304,7 +1304,7 @@ exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) =>
         validation: items.find((i) => i.key === "VALIDATION")?.process || "",
         master: (items.find((i) => i.key === "MASTER PIECE") || items.find((i) => i.key === "MASTER"))?.process || "",
         due: (() => {
-          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
+          const epoch = Number(items.find((i) => i.key === "TARGET DATE")?.value);
           if (!epoch) return null;
           return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
         })(),
@@ -1716,7 +1716,11 @@ exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
         proto: items.find((i) => i.key === "PROTO")?.process || "",
         validation: items.find((i) => i.key === "VALIDATION")?.process || "",
         master: (items.find((i) => i.key === "MASTER PIECE") || items.find((i) => i.key === "MASTER"))?.process || "",
-        due: items.find((i) => i.key === "DUE")?.value || items.find((i) => i.key === "DUE DATE")?.value || "",
+        due: (() => {
+          const epoch = Number(items.find((i) => i.key === "TARGET DATE")?.value);
+          if (!epoch) return null;
+          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+        })(),
       };
     });
 
