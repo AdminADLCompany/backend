@@ -1298,7 +1298,7 @@ exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) =>
       const items = row.items;
       return {
         from: items.find((i) => i.key === "FROM")?.value || "",
-        date: items.find((i) => i.key === "DATE")?.value || "",
+        date: items.find((i) => i.key === "TARGET DATE")?.value || "",
         part: items.find((i) => i.key === "PART")?.value || items.find((i) => i.key === "PART NAME")?.value || "",
         proto: items.find((i) => i.key === "PROTO")?.process || "",
         validation: items.find((i) => i.key === "VALIDATION")?.process || "",
@@ -1711,7 +1711,7 @@ exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
       const items = row.items;
       return {
         from: items.find((i) => i.key === "FROM")?.value || "",
-        date: items.find((i) => i.key === "DATE")?.value || "",
+        date: items.find((i) => i.key === "TARGET DATE")?.value || "",
         part: items.find((i) => i.key === "PART")?.value || items.find((i) => i.key === "PART NAME")?.value || "",
         proto: items.find((i) => i.key === "PROTO")?.process || "",
         validation: items.find((i) => i.key === "VALIDATION")?.process || "",
