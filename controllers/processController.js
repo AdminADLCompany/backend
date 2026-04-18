@@ -1750,8 +1750,8 @@ exports.getMainSettings = catchAsyncErrors(async (req, res, next) => {
 
   const filteredData = settingsProcess.data
     .filter((row) => {
-      const status = row.items.find((i) => i.key === "STATUS")?.value;
-      return status?.toUpperCase() !== "CLOSED";
+      const status = row.items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
+      return status?.toUpperCase() !== "UNDER PROCESS";
     });
 
   res.status(200).json({
@@ -1770,16 +1770,16 @@ exports.getSettingsDashboard = catchAsyncErrors(async (req, res, next) => {
   const { startDate, endDate } = req.query;
   let filteredData = settingsProcess.data;
 
-  if (startDate && endDate) {
-    const start = Number(startDate);
-    const end = Number(endDate);
-    filteredData = filteredData.filter((row) => {
-      const dateItem = row.items.find((i) => i.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-      const epochMs = Number(dateItem.value);
-      return epochMs >= start && epochMs <= end;
-    });
-  }
+  // if (startDate && endDate) {
+  //   const start = Number(startDate);
+  //   const end = Number(endDate);
+  //   filteredData = filteredData.filter((row) => {
+  //     const dateItem = row.items.find((i) => i.key === "DATE");
+  //     if (!dateItem || !dateItem.value) return false;
+  //     const epochMs = Number(dateItem.value);
+  //     return epochMs >= start && epochMs <= end;
+  //   });
+  // }
 
   let totalSettingTime = 0;
   let totalSetupLoss = 0;
