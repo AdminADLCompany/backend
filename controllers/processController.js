@@ -1837,12 +1837,18 @@ exports.getCalibrationDueDashboard = catchAsyncErrors(async (req, res, next) => 
 
   const doneCount = filteredCalibration.filter((row) => {
     const status = row.items.find((item) => item.key === "DONE")?.value;
-    return status?.toString().toLowerCase() === "done";
+    return status?.toString().toLowerCase() !== "";
   }).length;
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayEpoch = today.getTime();
+
   const dueCount = filteredCalibration.filter((row) => {
-    const status = row.items.find((item) => item.key === "DONE")?.value;
-    return status?.toString().toLowerCase() === "due";
+    const dueValue = row.items.find((item) => item.key === "DUE")?.value;
+    if (!dueValue) return false;
+    const dueEpoch = Number(dueValue);
+    return !isNaN(dueEpoch) && dueEpoch > todayEpoch;
   }).length;
 
   res.status(200).json({
