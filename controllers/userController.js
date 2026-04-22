@@ -267,3 +267,65 @@ exports.getUserHistory = catchAsyncErrors(async (req, res, next) => {
     data: history,
   });
 });
+
+// Admin: Get specific user details
+exports.getSingleUser = catchAsyncErrors(async (req, res, next) => {
+  if (req.user.accessLevel !== 'admin') {
+    return next(new ErrorHandler('Access denied. Admin only.', 403));
+  }
+
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    return next(new ErrorHandler(`User does not exist with id: ${req.params.id}`, 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    user,
+  });
+});
+
+// Admin: Update user details
+exports.updateUser = catchAsyncErrors(async (req, res, next) => {
+  if (req.user.accessLevel !== 'admin') {
+    return next(new ErrorHandler('Access denied. Admin only.', 403));
+  }
+
+  const newUserDetails = {
+    name: req.body.name,
+    email: req.body.email,
+    employeeId: req.body.employeeId,
+    role: req.body.role,
+    department: req.body.department,
+    accessLevel: req.body.accessLevel,
+    processAccess: req.body.processAccess
+  };
+
+  // If password is provided, hash it before updating
+  if (req.body.password && req.body.password.trim() !== "") {
+    newUserDetails.password = req.body.password;
+    // Note: The User model should have a pre-save hook to hash the password. 
+    // If using findByIdAndUpdate, we might need to handle hashing manually or use user.save()
+  }
+
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    return next(new ErrorHandler(`User does not exist with id: ${req.params.id}`, 404));
+  }
+
+  // Update fields individually to trigger pre-save hooks if necessary
+  Object.keys(newUserDetails).forEach(key => {
+    if (newUserDetails[key] !== undefined) {
+      user[key] = newUserDetails[key];
+    }
+  });
+
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "User updated successfully"
+  });
+});
