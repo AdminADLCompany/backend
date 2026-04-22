@@ -2317,7 +2317,19 @@ exports.handleUpdateIntersection = async (
       const settingColor = productionReportRow.items.find(
         (i) => i.key === "SETTING",
       );
-      if (settingColor) settingColor.process = "green";
+      // if (settingColor) settingColor.process = "green";
+
+      const status = items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
+
+      if (status === "No") {
+        settingColor.process = "blue";
+      } else if (status === "Completed") {
+        settingColor.process = "green";
+      } else if (status === "Under Process") {
+        settingColor.process = "orange";
+      } else {
+        settingColor.process = "yellow";
+      }
 
       const end = endRaw < start ? endRaw + 1440 : endRaw;
       const totalTimeElapsed = end - start;

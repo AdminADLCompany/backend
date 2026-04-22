@@ -28,6 +28,10 @@ const userSchema = mongoose.Schema({
     type: [String],
     required: true,
   },
+  processAccess: {
+    type: [String],
+    default: [],
+  },
   accessLevel: {
     type: String,
     required: true,
