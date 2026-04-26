@@ -329,3 +329,31 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
     message: "User updated successfully"
   });
 });
+
+// Change Password API
+exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
+  const { oldPassword, password, confirmPassword } = req.body;
+
+  if (!oldPassword || !password || !confirmPassword) {
+    return next(new ErrorHandler("Please provide all fields", 400));
+  }
+
+  const user = await User.findById(req.user.id).select("+password");
+
+  const isPasswordMatched = await user.comparePassword(oldPassword);
+
+  if (!isPasswordMatched) {
+    return next(new ErrorHandler("Old password is incorrect", 400));
+  }
+
+  if (password !== confirmPassword) {
+    return next(new ErrorHandler("Password does not match", 400));
+  }
+
+  user.password = password;
+
+  await user.save();
+
+  sendToken(user, 200, res);
+});
+

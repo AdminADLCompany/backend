@@ -30,6 +30,8 @@ const product = require("./routes/product");
 const department = require("./routes/department");
 const process = require("./routes/process");
 const history = require("./routes/history");
+const category = require("./routes/category");
+const subCategory = require("./routes/subCategory");
 
 // Using routes
 app.use("/api/v1/user", user);
@@ -37,6 +39,8 @@ app.use("/api/v1/product", product);
 app.use("/api/v1/department", department);
 app.use("/api/v1/process", process);
 app.use("/api/v1/history", history);
+app.use("/api/v1/category", category);
+app.use("/api/v1/subcategory", subCategory);
 
 app.get("/", (req, res) => {
   res.send("Hello World!");

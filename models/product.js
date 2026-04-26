@@ -12,6 +12,16 @@ const productSchema = new mongoose.Schema({
         type: String,
         enum: ['waiting for order', 'order confirm', 'under progress', 'supplied to customer']
     },
+    category: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Category',
+        required: true
+    },
+    subCategory: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'SubCategory',
+        required: true
+    },
     partNo: {
         type: String,
         required: true

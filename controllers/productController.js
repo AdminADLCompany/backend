@@ -4,9 +4,10 @@ const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 
 exports.getAllProducts = catchAsyncErrors(async (req, res, next) => {
-  const products = await Product.find();
-
-  await Product.populate(products, { path: "updatedBy", select: "name email" });
+  const products = await Product.find()
+    .populate("category", "name")
+    .populate("subCategory", "name")
+    .populate("updatedBy", "name email");
 
   res.status(200).json({
     success: true,
@@ -16,9 +17,10 @@ exports.getAllProducts = catchAsyncErrors(async (req, res, next) => {
 });
 
 exports.getProductById = catchAsyncErrors(async (req, res, next) => {
-  const product = await Product.findById(req.params.id);
-
-  await Product.populate(product, { path: "updatedBy", select: "name email" });
+  const product = await Product.findById(req.params.id)
+    .populate("category", "name")
+    .populate("subCategory", "name")
+    .populate("updatedBy", "name email");
 
   if (!product) {
     return next(new ErrorHandler("Product not found", 404));
@@ -34,6 +36,8 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
     name,
     description,
     status,
+    category,
+    subCategory,
     partNo,
     series,
     image,
@@ -53,6 +57,8 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
   if (
     !name ||
     !description ||
+    !category ||
+    !subCategory ||
     !partNo ||
     !series ||
     !image ||
@@ -75,6 +81,8 @@ exports.createProduct = catchAsyncErrors(async (req, res, next) => {
     name,
     description,
     status,
+    category,
+    subCategory,
     partNo,
     series,
     image,
@@ -110,7 +118,10 @@ exports.updateProduct = catchAsyncErrors(async (req, res, next) => {
 
   const product = await Product.findByIdAndUpdate(req.params.id, updates, {
     new: true,
-  }).populate("updatedBy", "name email");
+  })
+    .populate("category", "name")
+    .populate("subCategory", "name")
+    .populate("updatedBy", "name email");
 
   if (!product) {
     return next(new ErrorHandler("Product not found", 404));
