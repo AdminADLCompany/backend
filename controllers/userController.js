@@ -357,3 +357,25 @@ exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
   sendToken(user, 200, res);
 });
 
+// Admin: Reset user password to default (12345)
+exports.resetUserPassword = catchAsyncErrors(async (req, res, next) => {
+  if (req.user.accessLevel !== 'admin') {
+    return next(new ErrorHandler('Access denied. Admin only.', 403));
+  }
+
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    return next(new ErrorHandler(`User does not exist with id: ${req.params.id}`, 404));
+  }
+
+  user.password = "12345";
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Password reset to default successfully"
+  });
+});
+
+

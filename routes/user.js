@@ -11,7 +11,8 @@ const {
     deleteUser,
     getSingleUser,
     updateUser,
-    updatePassword
+    updatePassword,
+    resetUserPassword
 } = require("../controllers/userController");
 
 const isAuthenticatedUser = require("../middleware/auth");
@@ -26,6 +27,7 @@ router.route("/delete").delete(isAuthenticatedUser, deleteUser);
 router.route("/password/update").put(isAuthenticatedUser, updatePassword);
 router.route("/:id").get(isAuthenticatedUser, getSingleUser);
 router.route("/update/:id").put(isAuthenticatedUser, updateUser);
+router.route("/admin/reset-password/:id").put(isAuthenticatedUser, resetUserPassword);
 
 
 module.exports = router;
