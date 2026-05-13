@@ -31,7 +31,6 @@ function toMinutes(t) {
   return h * 60 + m;
 }
 
-
 exports.getAllProcesses = catchAsyncErrors(async (req, res, next) => {
   // populate process and updatedBy
   const processes = await Process.find()
@@ -201,7 +200,12 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       if (item.process === "processId" && item.value) {
         const p = await Process.findOne({ processId: item.value });
         if (p?._id) item.value = `processId - ${p._id}`;
-        item.process = (item.key === "PROTO" || item.key === "VALIDATION" || item.key === "MASTER PIECE") ? "red" : "value";
+        item.process =
+          item.key === "PROTO" ||
+          item.key === "VALIDATION" ||
+          item.key === "MASTER PIECE"
+            ? "red"
+            : "value";
       }
     }
 
@@ -232,7 +236,10 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
 
       // ---- calculate break minutes ----
       const breakValues = calculateBreaks(start, end, sceduledLoss);
-      const breakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
+      const breakMinutes = Object.values(breakValues).reduce(
+        (acc, val) => acc + val,
+        0,
+      );
 
       const workingTime = totalTime - breakMinutes;
       const plan = Math.floor(workingTime / cycleTime);
@@ -264,7 +271,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         qlStatusItem.value =
           quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
       }
-    } 
+    }
     // ---- MS/R/006A → MS/R/006 ---- Order List -> Quotation list
     else if (process.processId === "MS/R/006A") {
       const orderProcess = await Process.findOne({
@@ -279,35 +286,56 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         if (orderRow) {
           // Sum of all existing DELIVERY QTY of this particular order row's id
           let totalDeliveryQty = process.data.reduce((sum, row) => {
-            if (row.rowDataId && row.rowDataId.toString() === rowDataId.toString()) {
-              const qty = row.items.find((item) => item.key === "DELIVERY QTY")?.value;
+            if (
+              row.rowDataId &&
+              row.rowDataId.toString() === rowDataId.toString()
+            ) {
+              const qty = row.items.find(
+                (item) => item.key === "DELIVERY QTY",
+              )?.value;
               return sum + Number(qty || 0);
             }
             return sum;
           }, 0);
 
           // Add current row's delivery qty
-          const currentDeliveryQty = Number(items.find((i) => i.key === "DELIVERY QTY")?.value || 0);
+          const currentDeliveryQty = Number(
+            items.find((i) => i.key === "DELIVERY QTY")?.value || 0,
+          );
           totalDeliveryQty += currentDeliveryQty;
 
           // current row order qty's PENDING QTY === QTY - total delivery qty.
-          const orderQty = Number(orderRow.items.find((item) => item.key === "QTY")?.value || 0);
+          const orderQty = Number(
+            orderRow.items.find((item) => item.key === "QTY")?.value || 0,
+          );
           const pendingQty = orderQty - totalDeliveryQty;
 
           const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
           if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
 
           // update orderRow's PENDING QTY
-          const orderPendingQtyItem = orderRow.items.find((item) => item.key === "PENDING QTY");
+          const orderPendingQtyItem = orderRow.items.find(
+            (item) => item.key === "PENDING QTY",
+          );
           if (orderPendingQtyItem) {
             orderPendingQtyItem.value = String(pendingQty);
           } else {
-            orderRow.items.push({ key: "PENDING QTY", value: String(pendingQty), process: "value" });
+            orderRow.items.push({
+              key: "PENDING QTY",
+              value: String(pendingQty),
+              process: "value",
+            });
           }
 
-          const customerName = orderRow.items.find((item) => item.key === "CUSTOMER NAME")?.value;
-          const partNo = orderRow.items.find((item) => item.key === "PART NO")?.value;
-          const poNo = orderRow.items.find((item) => item.key === "PO NO")?.value;
+          const customerName = orderRow.items.find(
+            (item) => item.key === "CUSTOMER NAME",
+          )?.value;
+          const partNo = orderRow.items.find(
+            (item) => item.key === "PART NO",
+          )?.value;
+          const poNo = orderRow.items.find(
+            (item) => item.key === "PO NO",
+          )?.value;
 
           const name = items.find((i) => i.key === "CUSTOMER NAME");
           const part = items.find((i) => i.key === "PART NO");
@@ -354,32 +382,39 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       if (itemCode)
         itemCode.value =
           matchedRow?.items.find((i) => i.key === "ITEM CODE")?.value ?? "";
-    }
-
-    else if (process.processId === "DD/R/007") {
+    } else if (process.processId === "DD/R/007") {
       // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
       const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
       const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
       const successRate = items.find((i) => i.key === "SUCCESS RATE");
       if (successRate)
-        successRate.value = String(100 - (Number(qtyReturned) / Number(qtySold) * 100))
-    }
-
-    else if (process.processId === "PR/R/003A") {
+        successRate.value = String(
+          100 - (Number(qtyReturned) / Number(qtySold)) * 100,
+        );
+    } else if (process.processId === "PR/R/003A") {
       const procurmentRegisterProcess = await Process.findOne({
         processId: "PR/R/003",
       });
 
       if (!procurmentRegisterProcess)
-        throw new ErrorHandler("Procurement Register Process (PR/R/003) not found", 404);
+        throw new ErrorHandler(
+          "Procurement Register Process (PR/R/003) not found",
+          404,
+        );
 
       const matchedRow = procurmentRegisterProcess.data.find((itemRow) => {
         return itemRow._id.toString() === rowDataId.toString();
       });
 
-      const vendorName = matchedRow?.items.find((item) => item.key === "VENDOR-NAME")?.value;
-      const itemName = matchedRow?.items.find((item) => item.key === "ITEM NAME")?.value;
-      const poNo = matchedRow?.items.find((item) => item.key === "PO NO")?.value;
+      const vendorName = matchedRow?.items.find(
+        (item) => item.key === "VENDOR-NAME",
+      )?.value;
+      const itemName = matchedRow?.items.find(
+        (item) => item.key === "ITEM NAME",
+      )?.value;
+      const poNo = matchedRow?.items.find(
+        (item) => item.key === "PO NO",
+      )?.value;
 
       const name = items.find((i) => i.key === "VENDOR NAME");
       const part = items.find((i) => i.key === "ITEM NAME");
@@ -462,7 +497,6 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   }
 
   if (process.processId === "MR/R/002") {
-
     const settingProcess = await Process.findOne({ processId: "MR/R/002A" });
 
     const settingData = settingProcess?.data.find((itemRow) => {
@@ -476,14 +510,20 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
     const reject = Number(items.find((i) => i.key === "REJECT")?.value);
     const oeeItem = items.find((i) => i.key === "OEE");
 
-    const settings = Number(settingData?.items.find((item) => item.key === "SETTING TIME")?.value ?? 0);
+    const settings = Number(
+      settingData?.items.find((item) => item.key === "SETTING TIME")?.value ??
+        0,
+    );
 
     const end = endRaw < start ? endRaw + 1440 : endRaw;
     const totalTime = end - start;
 
     // ---- calculate break minutes ----
     const breakValues = calculateBreaks(start, end, sceduledLoss);
-    const breakMinutes = Object.values(breakValues).reduce((acc, val) => acc + val, 0);
+    const breakMinutes = Object.values(breakValues).reduce(
+      (acc, val) => acc + val,
+      0,
+    );
 
     const workingTime = totalTime - breakMinutes - settings;
     const plan = Math.floor(workingTime / cycleTime);
@@ -505,9 +545,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         workingTime) *
       100;
     oeeItem.value = Math.floor(OEE);
-  } 
-  
-  else if (process.processId === "DD/R/010") {
+  } else if (process.processId === "DD/R/010") {
     // Sync process statuses from DD/R/012 (Detailed NPD Checklist)
     const d12Process = await Process.findOne({ processId: "DD/R/012" });
     if (d12Process) {
@@ -570,18 +608,16 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         }
       }
     }
-  }
-
-  else if (process.processId === "DD/R/007") {
-      // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
-      const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
-      const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
-      const successRate = items.find((i) => i.key === "SUCCESS RATE");
-      if (successRate)
-        successRate.value = String(100 - (Number(qtyReturned) / Number(qtySold) * 100));
-  }
-
-  else if (process.processId === "MS/R/006A") {
+  } else if (process.processId === "DD/R/007") {
+    // (QTY RETURNED / QTY SOLD) * 100 calculate this item row and store in the item SUCCESS RATE
+    const qtyReturned = items.find((i) => i.key === "QTY RETURNED")?.value;
+    const qtySold = items.find((i) => i.key === "QTY SOLD")?.value;
+    const successRate = items.find((i) => i.key === "SUCCESS RATE");
+    if (successRate)
+      successRate.value = String(
+        100 - (Number(qtyReturned) / Number(qtySold)) * 100,
+      );
+  } else if (process.processId === "MS/R/006A") {
     const orderProcess = await Process.findOne({
       processId: "MS/R/006",
     });
@@ -600,33 +636,49 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
             r.rowDataId &&
             r.rowDataId.toString() === sourceRowId.toString()
           ) {
-            const qty = r.items.find((item) => item.key === "DELIVERY QTY")?.value;
+            const qty = r.items.find(
+              (item) => item.key === "DELIVERY QTY",
+            )?.value;
             return sum + Number(qty || 0);
           }
           return sum;
         }, 0);
 
         // Add current updated delivery qty
-        const currentDeliveryQty = Number(items.find((i) => i.key === "DELIVERY QTY")?.value || 0);
+        const currentDeliveryQty = Number(
+          items.find((i) => i.key === "DELIVERY QTY")?.value || 0,
+        );
         totalDeliveryQty += currentDeliveryQty;
 
         // current row order qty's PENDING QTY === QTY - total delivery qty
-        const orderQty = Number(orderRow.items.find((item) => item.key === "QTY")?.value || 0);
+        const orderQty = Number(
+          orderRow.items.find((item) => item.key === "QTY")?.value || 0,
+        );
         const pendingQty = orderQty - totalDeliveryQty;
 
         const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
         if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
 
         // update orderRow's PENDING QTY
-        const orderPendingQtyItem = orderRow.items.find((item) => item.key === "PENDING QTY");
+        const orderPendingQtyItem = orderRow.items.find(
+          (item) => item.key === "PENDING QTY",
+        );
         if (orderPendingQtyItem) {
           orderPendingQtyItem.value = String(pendingQty);
         } else {
-          orderRow.items.push({ key: "PENDING QTY", value: String(pendingQty), process: "value" });
+          orderRow.items.push({
+            key: "PENDING QTY",
+            value: String(pendingQty),
+            process: "value",
+          });
         }
 
-        const customerName = orderRow.items.find((item) => item.key === "CUSTOMER NAME")?.value;
-        const partNo = orderRow.items.find((item) => item.key === "PART NO")?.value;
+        const customerName = orderRow.items.find(
+          (item) => item.key === "CUSTOMER NAME",
+        )?.value;
+        const partNo = orderRow.items.find(
+          (item) => item.key === "PART NO",
+        )?.value;
         const poNo = orderRow.items.find((item) => item.key === "PO NO")?.value;
 
         const name = items.find((i) => i.key === "CUSTOMER NAME");
@@ -641,32 +693,37 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         await orderProcess.save();
       }
     }
+  } else if (process.processId === "PR/R/003A") {
+    const procurmentRegisterProcess = await Process.findOne({
+      processId: "PR/R/003",
+    });
+
+    if (!procurmentRegisterProcess)
+      throw new ErrorHandler(
+        "Procurement Register Process (PR/R/003) not found",
+        404,
+      );
+
+    const matchedRow = procurmentRegisterProcess.data.find((itemRow) => {
+      return itemRow._id.toString() === row.rowDataId?.toString();
+    });
+
+    const vendorName = matchedRow?.items.find(
+      (item) => item.key === "VENDOR-NAME",
+    )?.value;
+    const itemName = matchedRow?.items.find(
+      (item) => item.key === "ITEM NAME",
+    )?.value;
+    const poNo = matchedRow?.items.find((item) => item.key === "PO NO")?.value;
+
+    const name = items.find((i) => i.key === "VENDOR NAME");
+    const part = items.find((i) => i.key === "ITEM NAME");
+    const PO = items.find((i) => i.key === "PO NO");
+
+    if (name) name.value = vendorName || "";
+    if (part) part.value = itemName || "";
+    if (PO) PO.value = poNo || "";
   }
-
-  else if (process.processId === "PR/R/003A") {
-      const procurmentRegisterProcess = await Process.findOne({
-        processId: "PR/R/003",
-      });
-
-      if (!procurmentRegisterProcess)
-        throw new ErrorHandler("Procurement Register Process (PR/R/003) not found", 404);
-
-      const matchedRow = procurmentRegisterProcess.data.find((itemRow) => {
-        return itemRow._id.toString() === row.rowDataId?.toString();
-      });
-
-      const vendorName = matchedRow?.items.find((item) => item.key === "VENDOR-NAME")?.value;
-      const itemName = matchedRow?.items.find((item) => item.key === "ITEM NAME")?.value;
-      const poNo = matchedRow?.items.find((item) => item.key === "PO NO")?.value;
-
-      const name = items.find((i) => i.key === "VENDOR NAME");
-      const part = items.find((i) => i.key === "ITEM NAME");
-      const PO = items.find((i) => i.key === "PO NO");
-
-      if (name) name.value = vendorName || "";
-      if (part) part.value = itemName || "";
-      if (PO) PO.value = poNo || "";
-    }
 
   // Update row data
   const previousItems = row.items;
@@ -1006,113 +1063,207 @@ exports.deleteAllProcessData = catchAsyncErrors(async (req, res, next) => {
 // Each controller fetches only the data for its own section.
 
 // GET /dashboard/production-plan
-exports.getDashboardProductionPlan = catchAsyncErrors(async (req, res, next) => {
-  const { startDate, endDate } = req.query ?? {};
-  const now = new Date();
-  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
-  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+exports.getDashboardProductionPlan = catchAsyncErrors(
+  async (req, res, next) => {
+    const { startDate, endDate } = req.query ?? {};
+    const now = new Date();
+    const effectiveStart = startDate
+      ? Number(startDate)
+      : new Date(now.getFullYear(), 0, 1).getTime();
+    const effectiveEnd = endDate
+      ? Number(endDate)
+      : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
 
-  const productionPlanProcess = await Process.findOne({ processId: "MR/R/001" });
-  if (!productionPlanProcess) return res.status(200).json({ success: true, data: {} });
+    const productionPlanProcess = await Process.findOne({
+      processId: "MR/R/001",
+    });
+    if (!productionPlanProcess)
+      return res.status(200).json({ success: true, data: {} });
 
-  const pendingDetails = productionPlanProcess.data.filter((row) => {
-    return (
-      row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !== "completed" &&
-      row.items.find((item) => item.key === "INCOMING INSPECTION")?.value?.toLowerCase() !== "completed" &&
-      row.items.find((item) => item.key === "MACHINE")?.value?.toLowerCase() !== "completed" &&
-      row.items.find((item) => item.key === "ASSEMBLY")?.value?.toLowerCase() !== "completed" &&
-      row.items.find((item) => item.key === "OUT PROCESS")?.value?.toLowerCase() !== "completed"
-    );
-  });
+    const pendingDetails = productionPlanProcess.data.filter((row) => {
+      return (
+        row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !==
+          "completed" &&
+        row.items
+          .find((item) => item.key === "INCOMING INSPECTION")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "MACHINE")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "ASSEMBLY")
+          ?.value?.toLowerCase() !== "completed" &&
+        row.items
+          .find((item) => item.key === "OUT PROCESS")
+          ?.value?.toLowerCase() !== "completed"
+      );
+    });
 
-  const reportGraph = [];
-  productionPlanProcess.data.forEach((row) => {
-    const partNo = row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
-    const planQty = Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
-    reportGraph.push({ partNo, planQty });
-  });
+    const reportGraph = [];
+    productionPlanProcess.data.forEach((row) => {
+      const partNo =
+        row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
+      const planQty =
+        Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
+      reportGraph.push({ partNo, planQty });
+    });
 
-  const totalPlanQty = productionPlanProcess.data.reduce((acc, row) => {
-    return acc + (Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0);
-  }, 0);
+    const totalPlanQty = productionPlanProcess.data.reduce((acc, row) => {
+      return (
+        acc +
+        (Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0)
+      );
+    }, 0);
 
-  res.status(200).json({ success: true, data: { pendingDetails, reportGraph, totalPlanQty } });
-});
+    res
+      .status(200)
+      .json({
+        success: true,
+        data: { pendingDetails, reportGraph, totalPlanQty },
+      });
+  },
+);
 
 // GET /dashboard/production-report
-exports.getDashboardProductionReport = catchAsyncErrors(async (req, res, next) => {
-  const { startDate, endDate } = req.query ?? {};
-  const now = new Date();
-  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
-  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+exports.getDashboardProductionReport = catchAsyncErrors(
+  async (req, res, next) => {
+    const { startDate, endDate } = req.query ?? {};
+    const now = new Date();
+    const effectiveStart = startDate
+      ? Number(startDate)
+      : new Date(now.getFullYear(), 0, 1).getTime();
+    const effectiveEnd = endDate
+      ? Number(endDate)
+      : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
 
-  const productionReportProcess = await Process.findOne({ processId: "MR/R/002" });
-  if (!productionReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0 } });
+    const productionReportProcess = await Process.findOne({
+      processId: "MR/R/002",
+    });
+    if (!productionReportProcess)
+      return res
+        .status(200)
+        .json({ success: true, data: { totalFiltered: 0 } });
 
-  const filteredRows = productionReportProcess.data.filter((row) => {
-    const dateItem = row.items.find((item) => item.key === "DATE");
-    if (!dateItem || !dateItem.value) return false;
-    const epochMs = Number(dateItem.value);
-    if (isNaN(epochMs)) return false;
-    return epochMs >= effectiveStart && epochMs <= effectiveEnd;
-  });
+    const filteredRows = productionReportProcess.data.filter((row) => {
+      const dateItem = row.items.find((item) => item.key === "DATE");
+      if (!dateItem || !dateItem.value) return false;
+      const epochMs = Number(dateItem.value);
+      if (isNaN(epochMs)) return false;
+      return epochMs >= effectiveStart && epochMs <= effectiveEnd;
+    });
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredRows.length } });
-});
+    res
+      .status(200)
+      .json({ success: true, data: { totalFiltered: filteredRows.length } });
+  },
+);
 
 // GET /dashboard/reject-report
 exports.getDashboardRejectReport = catchAsyncErrors(async (req, res, next) => {
-  const [rejectReportProcess, productionReportProcess, actionTakenProcess] = await Promise.all([
-    Process.findOne({ processId: "MR/R/003" }),
-    Process.findOne({ processId: "MR/R/002" }),
-    Process.findOne({ processId: "MR/R/003B" }),
-  ]);
+  const [rejectReportProcess, productionReportProcess, actionTakenProcess] =
+    await Promise.all([
+      Process.findOne({ processId: "MR/R/003" }),
+      Process.findOne({ processId: "MR/R/002" }),
+      Process.findOne({ processId: "MR/R/003B" }),
+    ]);
 
-  if (!rejectReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], chartResult: 0 } });
+  if (!rejectReportProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: { totalFiltered: 0, data: [], chartResult: 0 },
+      });
 
   const openData = actionTakenProcess
-    ? actionTakenProcess.data.filter((row) =>
-        row.items.find((item) => item.key === "ACTION PLAN STATUS")?.value?.toLowerCase() === "open"
+    ? actionTakenProcess.data.filter(
+        (row) =>
+          row.items
+            .find((item) => item.key === "ACTION PLAN STATUS")
+            ?.value?.toLowerCase() === "open",
       )
     : [];
 
   const resultData = rejectReportProcess.data.filter((row) =>
-    openData.some((openRow) => openRow.rowDataId?.toString() === row._id.toString())
+    openData.some(
+      (openRow) => openRow.rowDataId?.toString() === row._id.toString(),
+    ),
   );
 
   let chartResult = 0;
   if (productionReportProcess && productionReportProcess.data.length > 0) {
-    const sumOfReject = rejectReportProcess.data.reduce((acc, row) =>
-      acc + (Number(row.items.find((item) => item.key === "REJECT QTY")?.value) || 0), 0);
-    const sumOfActual = productionReportProcess.data.reduce((acc, row) =>
-      acc + (Number(row.items.find((item) => item.key === "ACTUAL QTY")?.value) || 0), 0);
+    const sumOfReject = rejectReportProcess.data.reduce(
+      (acc, row) =>
+        acc +
+        (Number(row.items.find((item) => item.key === "REJECT QTY")?.value) ||
+          0),
+      0,
+    );
+    const sumOfActual = productionReportProcess.data.reduce(
+      (acc, row) =>
+        acc +
+        (Number(row.items.find((item) => item.key === "ACTUAL QTY")?.value) ||
+          0),
+      0,
+    );
     chartResult = sumOfActual > 0 ? sumOfReject / sumOfActual : 0;
   }
 
-  res.status(200).json({ success: true, data: { totalFiltered: resultData.length, data: resultData, chartResult } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: { totalFiltered: resultData.length, data: resultData, chartResult },
+    });
 });
 
 // GET /dashboard/rework-report
 exports.getDashboardReworkReport = catchAsyncErrors(async (req, res, next) => {
   const reworkReportProcess = await Process.findOne({ processId: "MR/R/003A" });
-  if (!reworkReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+  if (!reworkReportProcess)
+    return res
+      .status(200)
+      .json({ success: true, data: { totalFiltered: 0, data: [] } });
 
-  const openData = reworkReportProcess.data.filter((row) =>
-    row.items.find((item) => item.key === "RR STATUS")?.value?.toLowerCase() === "open"
+  const openData = reworkReportProcess.data.filter(
+    (row) =>
+      row.items
+        .find((item) => item.key === "RR STATUS")
+        ?.value?.toLowerCase() === "open",
   );
 
-  res.status(200).json({ success: true, data: { totalFiltered: openData.length, data: openData } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: { totalFiltered: openData.length, data: openData },
+    });
 });
 
 // GET /dashboard/dispatch
 exports.getDashboardDispatch = catchAsyncErrors(async (req, res, next) => {
   const { startDate, endDate } = req.query ?? {};
   const now = new Date();
-  const effectiveStart = startDate ? Number(startDate) : new Date(now.getFullYear(), 0, 1).getTime();
-  const effectiveEnd = endDate ? Number(endDate) : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
+  const effectiveStart = startDate
+    ? Number(startDate)
+    : new Date(now.getFullYear(), 0, 1).getTime();
+  const effectiveEnd = endDate
+    ? Number(endDate)
+    : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
 
   const dispatchProcess = await Process.findOne({ processId: "MR/R/006" });
-  if (!dispatchProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalQuantity: 0, graphChart: { monthWise: [], yearWise: [] } } });
+  if (!dispatchProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: {
+          totalFiltered: 0,
+          data: [],
+          totalQuantity: 0,
+          graphChart: { monthWise: [], yearWise: [] },
+        },
+      });
 
   const filteredRows = dispatchProcess.data.filter((row) => {
     const dateItem = row.items.find((item) => item.key === "DATE");
@@ -1131,8 +1282,11 @@ exports.getDashboardDispatch = catchAsyncErrors(async (req, res, next) => {
   const monthMap = {};
   const yearMap = {};
   filteredRows.forEach((row) => {
-    const epochMs = Number(row.items.find((item) => item.key === "DATE")?.value);
-    const qty = Number(row.items.find((item) => item.key === "QTY")?.value) || 0;
+    const epochMs = Number(
+      row.items.find((item) => item.key === "DATE")?.value,
+    );
+    const qty =
+      Number(row.items.find((item) => item.key === "QTY")?.value) || 0;
     const d = new Date(epochMs);
     const year = d.getUTCFullYear();
     const month = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -1141,241 +1295,450 @@ exports.getDashboardDispatch = catchAsyncErrors(async (req, res, next) => {
     yearMap[year] = (yearMap[year] || 0) + qty;
   });
 
-  const monthWise = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([label, qty]) => ({ label, qty }));
-  const yearWise = Object.entries(yearMap).sort(([a], [b]) => Number(a) - Number(b)).map(([label, qty]) => ({ label: String(label), qty }));
-  const totalQuantity = filteredRows.reduce((acc, row) => acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+  const monthWise = Object.entries(monthMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, qty]) => ({ label, qty }));
+  const yearWise = Object.entries(yearMap)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([label, qty]) => ({ label: String(label), qty }));
+  const totalQuantity = filteredRows.reduce(
+    (acc, row) =>
+      acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0),
+    0,
+  );
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredRows.length, data, totalQuantity, graphChart: { monthWise, yearWise } } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredRows.length,
+        data,
+        totalQuantity,
+        graphChart: { monthWise, yearWise },
+      },
+    });
 });
 
 // GET /dashboard/calibration
 exports.getDashboardCalibration = catchAsyncErrors(async (req, res, next) => {
-  const calibrationReportProcess = await Process.findOne({ processId: "QA/R/002A" });
-  if (!calibrationReportProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], doneCount: 0, dueCount: 0 } });
+  const calibrationReportProcess = await Process.findOne({
+    processId: "QA/R/002A",
+  });
+  if (!calibrationReportProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: { totalFiltered: 0, data: [], doneCount: 0, dueCount: 0 },
+      });
 
   const filteredCalibration = calibrationReportProcess.data.filter((row) => {
-    const certificate = row.items.find((item) => item.key === "CERTIFICATE")?.value;
+    const certificate = row.items.find(
+      (item) => item.key === "CERTIFICATE",
+    )?.value;
     const date = row.items.find((item) => item.key === "DATE")?.value;
-    return certificate === "" || certificate === null || date <= Date.now() - 10 * 24 * 60 * 60 * 1000;
+    return (
+      certificate === "" ||
+      certificate === null ||
+      date <= Date.now() - 10 * 24 * 60 * 60 * 1000
+    );
   });
 
-  const doneCount = filteredCalibration.filter((row) =>
-    row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() === "done"
+  const doneCount = filteredCalibration.filter(
+    (row) =>
+      row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() ===
+      "done",
   ).length;
-  const dueCount = filteredCalibration.filter((row) =>
-    row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() === "due"
+  const dueCount = filteredCalibration.filter(
+    (row) =>
+      row.items.find((item) => item.key === "DONE")?.value?.toLowerCase() ===
+      "due",
   ).length;
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredCalibration.length, data: filteredCalibration, doneCount, dueCount } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredCalibration.length,
+        data: filteredCalibration,
+        doneCount,
+        dueCount,
+      },
+    });
 });
 
 // GET /dashboard/incoming-inspection
-exports.getDashboardIncomingInspection = catchAsyncErrors(async (req, res, next) => {
-  const incomingInspectionProcess = await Process.findOne({ processId: "QA/R/003" });
-  if (!incomingInspectionProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+exports.getDashboardIncomingInspection = catchAsyncErrors(
+  async (req, res, next) => {
+    const incomingInspectionProcess = await Process.findOne({
+      processId: "QA/R/003",
+    });
+    if (!incomingInspectionProcess)
+      return res
+        .status(200)
+        .json({ success: true, data: { totalFiltered: 0, data: [] } });
 
-  const filteredInspection = incomingInspectionProcess.data.filter((row) => {
-    const status = row.items.find((item) => item.key === "INSPECTION-STATUS")?.value;
-    return status?.toLowerCase() !== "done";
-  });
+    const filteredInspection = incomingInspectionProcess.data.filter((row) => {
+      const status = row.items.find(
+        (item) => item.key === "INSPECTION-STATUS",
+      )?.value;
+      return status?.toLowerCase() !== "done";
+    });
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredInspection.length, data: filteredInspection } });
-});
+    res
+      .status(200)
+      .json({
+        success: true,
+        data: {
+          totalFiltered: filteredInspection.length,
+          data: filteredInspection,
+        },
+      });
+  },
+);
 
 // GET /dashboard/customer-complaints
-exports.getDashboardCustomerComplaints = catchAsyncErrors(async (req, res, next) => {
-  const customerComplientRegisterProcess = await Process.findOne({ processId: "QA/R/007" });
-  if (!customerComplientRegisterProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+exports.getDashboardCustomerComplaints = catchAsyncErrors(
+  async (req, res, next) => {
+    const customerComplientRegisterProcess = await Process.findOne({
+      processId: "QA/R/007",
+    });
+    if (!customerComplientRegisterProcess)
+      return res
+        .status(200)
+        .json({ success: true, data: { totalFiltered: 0, data: [] } });
 
-  const filteredCustomer = customerComplientRegisterProcess.data.map((row) => {
-    const suppliedQty = row.items.find((item) => item.key === "SUPPLIED QTY")?.value;
-    const failedQty = row.items.find((item) => item.key === "FAILED QTY")?.value;
-    const date = row.items.find((item) => item.key === "DATE")?.value;
-    return { ratio: suppliedQty ? failedQty / suppliedQty : 0, date };
-  });
+    const filteredCustomer = customerComplientRegisterProcess.data.map(
+      (row) => {
+        const suppliedQty = row.items.find(
+          (item) => item.key === "SUPPLIED QTY",
+        )?.value;
+        const failedQty = row.items.find(
+          (item) => item.key === "FAILED QTY",
+        )?.value;
+        const date = row.items.find((item) => item.key === "DATE")?.value;
+        return { ratio: suppliedQty ? failedQty / suppliedQty : 0, date };
+      },
+    );
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredCustomer.length, data: filteredCustomer } });
-});
+    res
+      .status(200)
+      .json({
+        success: true,
+        data: {
+          totalFiltered: filteredCustomer.length,
+          data: filteredCustomer,
+        },
+      });
+  },
+);
 
 // GET /dashboard/customer-list
 exports.getDashboardCustomerList = catchAsyncErrors(async (req, res, next) => {
   const { salesPerson, location } = req.query ?? {};
   const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
-  if (!customerListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+  if (!customerListProcess)
+    return res
+      .status(200)
+      .json({ success: true, data: { totalFiltered: 0, data: [] } });
 
   const filteredCustomer = customerListProcess.data.filter((row) => {
-    const salesPersonValue = row.items.find((item) => item.key === "SALES PERSON")?.value;
-    const locationValue = row.items.find((item) => item.key === "LOCATION")?.value;
-    const matchSales = !salesPerson || salesPerson === "" || salesPersonValue?.toLowerCase() === salesPerson.toLowerCase();
-    const matchLocation = !location || location === "" || locationValue?.toLowerCase() === location.toLowerCase();
+    const salesPersonValue = row.items.find(
+      (item) => item.key === "SALES PERSON",
+    )?.value;
+    const locationValue = row.items.find(
+      (item) => item.key === "LOCATION",
+    )?.value;
+    const matchSales =
+      !salesPerson ||
+      salesPerson === "" ||
+      salesPersonValue?.toLowerCase() === salesPerson.toLowerCase();
+    const matchLocation =
+      !location ||
+      location === "" ||
+      locationValue?.toLowerCase() === location.toLowerCase();
     return matchSales && matchLocation;
   });
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredCustomer.length, data: filteredCustomer } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: { totalFiltered: filteredCustomer.length, data: filteredCustomer },
+    });
 });
 
 // GET /dashboard/quotation-list
 exports.getDashboardQuotationList = catchAsyncErrors(async (req, res, next) => {
   const quotationListProcess = await Process.findOne({ processId: "MS/R/005" });
-  if (!quotationListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [] } });
+  if (!quotationListProcess)
+    return res
+      .status(200)
+      .json({ success: true, data: { totalFiltered: 0, data: [] } });
 
   const filteredQuotation = quotationListProcess.data.filter((row) => {
-    const status = row.items.find((item) => item.key === "QL STATUS")?.value?.toLowerCase();
+    const status = row.items
+      .find((item) => item.key === "QL STATUS")
+      ?.value?.toLowerCase();
     return status === "waiting for quote" || status === "waiting for order";
   });
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredQuotation.length, data: filteredQuotation } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredQuotation.length,
+        data: filteredQuotation,
+      },
+    });
 });
 
 // GET /dashboard/order-list
 exports.getDashboardOrderList = catchAsyncErrors(async (req, res, next) => {
   const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
-  if (!orderListProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalOrderQty: 0 } });
+  if (!orderListProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: { totalFiltered: 0, data: [], totalOrderQty: 0 },
+      });
 
   const filteredOrder = orderListProcess.data.filter((row) => {
     const status = row.items.find((item) => item.key === "STATUS")?.value;
     return status?.toLowerCase() !== "closed";
   });
 
-  const totalOrderQty = filteredOrder.reduce((acc, row) =>
-    acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+  const totalOrderQty = filteredOrder.reduce(
+    (acc, row) =>
+      acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0),
+    0,
+  );
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredOrder.length, data: filteredOrder, totalOrderQty } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredOrder.length,
+        data: filteredOrder,
+        totalOrderQty,
+      },
+    });
 });
 
 // GET /dashboard/procurement
 exports.getDashboardProcurement = catchAsyncErrors(async (req, res, next) => {
   const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
-  if (!procurementProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalPendingQty: 0 } });
+  if (!procurementProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: { totalFiltered: 0, data: [], totalPendingQty: 0 },
+      });
 
   const filteredProcurement = procurementProcess.data.filter((row) => {
     const status = row.items.find((item) => item.key === "PR STATUS")?.value;
     return status?.toLowerCase() === "pending";
   });
 
-  const totalPendingQty = filteredProcurement.reduce((acc, row) =>
-    acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0), 0);
+  const totalPendingQty = filteredProcurement.reduce(
+    (acc, row) =>
+      acc + (Number(row.items.find((item) => item.key === "QTY")?.value) || 0),
+    0,
+  );
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredProcurement.length, data: filteredProcurement, totalPendingQty } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredProcurement.length,
+        data: filteredProcurement,
+        totalPendingQty,
+      },
+    });
 });
 
 // GET /dashboard/stock
 exports.getDashboardStock = catchAsyncErrors(async (req, res, next) => {
   const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
-  if (!stockDataProcess) return res.status(200).json({ success: true, data: { totalFiltered: 0, data: [], totalStockQty: 0 } });
+  if (!stockDataProcess)
+    return res
+      .status(200)
+      .json({
+        success: true,
+        data: { totalFiltered: 0, data: [], totalStockQty: 0 },
+      });
 
   const filteredStock = stockDataProcess.data.filter((row) => {
-    const itemCategory = row.items.find((item) => item.key === "ITEM CATEGORY")?.value;
-    return itemCategory?.toLowerCase() === "finished good" || itemCategory?.toLowerCase() === "finsihed good";
+    const itemCategory = row.items.find(
+      (item) => item.key === "ITEM CATEGORY",
+    )?.value;
+    return (
+      itemCategory?.toLowerCase() === "finished good" ||
+      itemCategory?.toLowerCase() === "finsihed good"
+    );
   });
 
-  const totalStockQty = filteredStock.reduce((acc, row) =>
-    acc + (Number(row.items.find((item) => item.key === "STOCK")?.value) || 0), 0);
+  const totalStockQty = filteredStock.reduce(
+    (acc, row) =>
+      acc +
+      (Number(row.items.find((item) => item.key === "STOCK")?.value) || 0),
+    0,
+  );
 
-  res.status(200).json({ success: true, data: { totalFiltered: filteredStock.length, data: filteredStock, totalStockQty } });
+  res
+    .status(200)
+    .json({
+      success: true,
+      data: {
+        totalFiltered: filteredStock.length,
+        data: filteredStock,
+        totalStockQty,
+      },
+    });
 });
 
-exports.getMainNPDRegisterDashboard = catchAsyncErrors(async (req, res, next) => {
-  const npdProcess = await Process.findOne({ processId: "DD/R/010" });
+exports.getMainNPDRegisterDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const npdProcess = await Process.findOne({ processId: "DD/R/010" });
 
-  if (!npdProcess) {
-    return next(new ErrorHandler("NPD Register Process (DD/R/010) not found", 404));
-  }
+    if (!npdProcess) {
+      return next(
+        new ErrorHandler("NPD Register Process (DD/R/010) not found", 404),
+      );
+    }
 
-  const filteredData = npdProcess.data
-    .filter((row) => {
-      const proto = row.items.find((i) => i.key === "PROTO")?.process;
-      const validation = row.items.find((i) => i.key === "VALIDATION")?.process;
-      const master = (
-        row.items.find((i) => i.key === "MASTER PIECE") ||
-        row.items.find((i) => i.key === "MASTER")
-      )?.process;
+    const filteredData = npdProcess.data
+      .filter((row) => {
+        const proto = row.items.find((i) => i.key === "PROTO")?.process;
+        const validation = row.items.find(
+          (i) => i.key === "VALIDATION",
+        )?.process;
+        const master = (
+          row.items.find((i) => i.key === "MASTER PIECE") ||
+          row.items.find((i) => i.key === "MASTER")
+        )?.process;
+        const status = row.items.find((i) => i.key === 'NPD STATUS')?.value;
 
-      // Filter: return rows where PROTO, VALIDATION, or MASTER is NOT green
-      return proto !== "green" || validation !== "green" || master !== "green";
-    })
-    .map((row) => {
-      const items = row.items;
-      return {
-        from: items.find((i) => i.key === "FROM")?.value || "",
-        date: items.find((i) => i.key === "TARGET DATE")?.value || "",
-        part: items.find((i) => i.key === "PART")?.value || items.find((i) => i.key === "PART NAME")?.value || "",
-        proto: items.find((i) => i.key === "PROTO")?.process || "",
-        validation: items.find((i) => i.key === "VALIDATION")?.process || "",
-        master: (items.find((i) => i.key === "MASTER PIECE") || items.find((i) => i.key === "MASTER"))?.process || "",
-        due: (() => {
-          const epoch = Number(items.find((i) => i.key === "TARGET DATE")?.value);
-          if (!epoch) return null;
-          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
-        })(),
-      };
+        // Filter: return rows where PROTO, VALIDATION, or MASTER is NOT green
+        return (
+          (proto !== "green" || validation !== "green" || master !== "green") && status !== "Not Feasible"
+        );
+      })
+      .map((row) => {
+        const items = row.items;
+        return {
+          from: items.find((i) => i.key === "FROM")?.value || "",
+          date: items.find((i) => i.key === "TARGET DATE")?.value || "",
+          part:
+            items.find((i) => i.key === "PART")?.value ||
+            items.find((i) => i.key === "PART NAME")?.value ||
+            "",
+          proto: items.find((i) => i.key === "PROTO")?.process || "",
+          validation: items.find((i) => i.key === "VALIDATION")?.process || "",
+          master:
+            (
+              items.find((i) => i.key === "MASTER PIECE") ||
+              items.find((i) => i.key === "MASTER")
+            )?.process || "",
+          due: (() => {
+            const epoch = Number(
+              items.find((i) => i.key === "TARGET DATE")?.value,
+            );
+            if (!epoch) return null;
+            return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+          })(),
+        };
+      });
+
+    res.status(200).json({
+      success: true,
+      count: filteredData.length,
+      data: filteredData,
+    });
+  },
+);
+
+exports.getMainProductListDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const productListProcess = await Process.findOne({ processId: "DD/R/001" });
+    const BOMProcess = await Process.findOne({ processId: "DD/R/002" });
+
+    if (!productListProcess || !BOMProcess) {
+      return next(
+        new ErrorHandler(
+          "Product List Process (DD/R/001) or BOM Process (DD/R/002) not found",
+          404,
+        ),
+      );
+    }
+
+    // GET THE COUNT OF THE RECORDS.
+    const totalProducts = productListProcess.data.length;
+    const totalBOMs = BOMProcess.data.length;
+
+    res.status(200).json({
+      success: true,
+      totalProducts,
+      totalBOMs,
+    });
+  },
+);
+
+exports.getMainRevisionControlDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const revisionControlProcess = await Process.findOne({
+      processId: "DD/R/005",
     });
 
-  res.status(200).json({
-    success: true,
-    count: filteredData.length,
-    data: filteredData,
-  });
-});
+    if (!revisionControlProcess) {
+      return next(
+        new ErrorHandler("Revision Control Process (DD/R/003) not found", 404),
+      );
+    }
 
-exports.getMainProductListDashboard = catchAsyncErrors(async (req, res, next) => {
-  const productListProcess = await Process.findOne({ processId: "DD/R/001" });
-  const BOMProcess = await Process.findOne({ processId: "DD/R/002" });
+    const filteredData = revisionControlProcess.data
+      .filter((row) => {
+        const status = row.items.find(
+          (i) => i.key === "REVISION STATUS",
+        )?.value;
+        return status?.toLowerCase() !== "revised";
+      })
+      .map((row) => {
+        const items = row.items;
+        return {
+          date: items.find((i) => i.key === "DATE")?.value || "",
+          part: items.find((i) => i.key === "PART NO")?.value || "",
+          status: items.find((i) => i.key === "REVISION STATUS")?.value || "",
+          due: (() => {
+            const epoch = Number(items.find((i) => i.key === "DATE")?.value);
+            if (!epoch) return null;
+            return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+          })(),
+        };
+      });
 
-  if (!productListProcess || !BOMProcess) {
-    return next(new ErrorHandler("Product List Process (DD/R/001) or BOM Process (DD/R/002) not found", 404));
-  }
-
-  // GET THE COUNT OF THE RECORDS.
-  const totalProducts = productListProcess.data.length;
-  const totalBOMs = BOMProcess.data.length;
-
-  res.status(200).json({
-    success: true,
-    totalProducts,
-    totalBOMs,
-  });
-
-});
-
-exports.getMainRevisionControlDashboard = catchAsyncErrors(async (req, res, next) => {
-  const revisionControlProcess = await Process.findOne({ processId: "DD/R/005" });
-
-  if (!revisionControlProcess) {
-    return next(new ErrorHandler("Revision Control Process (DD/R/003) not found", 404));
-  }
-
-  const filteredData = revisionControlProcess.data
-    .filter((row) => {
-      const status = row.items.find((i) => i.key === "REVISION STATUS")?.value;
-      return status?.toLowerCase() !== "revised";
-    })
-    .map((row) => {
-      const items = row.items;
-      return {
-        date: items.find((i) => i.key === "DATE")?.value || "",
-        part: items.find((i) => i.key === "PART NO")?.value || "",
-        status: items.find((i) => i.key === "REVISION STATUS")?.value || "",
-        due: (() => {
-          const epoch = Number(items.find((i) => i.key === "DATE")?.value);
-          if (!epoch) return null;
-          return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
-        })(),
-      };
+    res.status(200).json({
+      success: true,
+      count: filteredData.length,
+      data: filteredData,
     });
+  },
+);
 
-  res.status(200).json({
-    success: true,
-    count: filteredData.length,
-    data: filteredData,
-  });
-});
-
-exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => {
+exports.getMainOrderListDashboard = catchAsyncErrors(async (req, res, next) => {
   const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
 
   if (!orderListProcess) {
-    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
+    return next(
+      new ErrorHandler("Order List Process (MS/R/006) not found", 404),
+    );
   }
 
   const { startDate, endDate } = req.query;
@@ -1387,13 +1750,12 @@ exports.getMainOrderListDashboard = catchAsyncErrors( async (req, res, next) => 
     ? Number(endDate)
     : new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999).getTime();
 
-  const filteredData = orderListProcess.data
-    .filter((row) => {
-      const dateItem = row.items.find((i) => i.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-      const epochMs = Number(dateItem.value);
-      return epochMs >= effectiveStart && epochMs <= effectiveEnd;
-    });
+  const filteredData = orderListProcess.data.filter((row) => {
+    const dateItem = row.items.find((i) => i.key === "DATE");
+    if (!dateItem || !dateItem.value) return false;
+    const epochMs = Number(dateItem.value);
+    return epochMs >= effectiveStart && epochMs <= effectiveEnd;
+  });
 
   res.status(200).json({
     success: true,
@@ -1440,57 +1802,63 @@ exports.getMainDocketsDashboard = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-exports.getProductSuccessDashboard = catchAsyncErrors(async (req, res, next) => {
-  const productSuccessProcess = await Process.findOne({ processId: "DD/R/007" });
+exports.getProductSuccessDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const productSuccessProcess = await Process.findOne({
+      processId: "DD/R/007",
+    });
 
-  if (!productSuccessProcess) {
-    return next(new ErrorHandler("Product Success Process (DD/R/007) not found", 404));
-  }
+    if (!productSuccessProcess) {
+      return next(
+        new ErrorHandler("Product Success Process (DD/R/007) not found", 404),
+      );
+    }
 
-  const filteredData = productSuccessProcess.data
-    .filter((row) => {
+    const filteredData = productSuccessProcess.data.filter((row) => {
       const status = row.items.find((i) => i.key === "STATUS")?.value;
       return status?.toUpperCase() !== "CLOSED";
     });
 
-  let totalSuccessRate = 0;
-  let count = 0;
+    let totalSuccessRate = 0;
+    let count = 0;
 
-  filteredData.forEach((row) => {
-    const successRateItem = row.items.find((i) => i.key === "SUCCESS RATE");
-    if (successRateItem && successRateItem.value) {
-      const val = parseFloat(successRateItem.value);
-      if (!isNaN(val)) {
-        totalSuccessRate += val;
-        count++;
+    filteredData.forEach((row) => {
+      const successRateItem = row.items.find((i) => i.key === "SUCCESS RATE");
+      if (successRateItem && successRateItem.value) {
+        const val = parseFloat(successRateItem.value);
+        if (!isNaN(val)) {
+          totalSuccessRate += val;
+          count++;
+        }
       }
-    }
-  });
+    });
 
-  const avgSuccessRate = count > 0 ? totalSuccessRate / count : 0;
+    const avgSuccessRate = count > 0 ? totalSuccessRate / count : 0;
 
-  res.status(200).json({
-    success: true,
-    data: {
-      totalOpen: filteredData.length,
-      avgSuccessRate: Number(avgSuccessRate.toFixed(2)),
-      openRecords: filteredData,
-    },
-  });
-});
+    res.status(200).json({
+      success: true,
+      data: {
+        totalOpen: filteredData.length,
+        avgSuccessRate: Number(avgSuccessRate.toFixed(2)),
+        openRecords: filteredData,
+      },
+    });
+  },
+);
 
 exports.getMainSettings = catchAsyncErrors(async (req, res, next) => {
   const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
 
   if (!settingsProcess) {
-    return next(new ErrorHandler("Settings Process (MR/R/002A) not found", 404));
+    return next(
+      new ErrorHandler("Settings Process (MR/R/002A) not found", 404),
+    );
   }
 
-  const filteredData = settingsProcess.data
-    .filter((row) => {
-      const status = row.items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
-      return status?.toUpperCase() !== "UNDER PROCESS";
-    });
+  const filteredData = settingsProcess.data.filter((row) => {
+    const status = row.items.find((i) => i.key === "STATUS OF SETTINGS")?.value;
+    return status?.toUpperCase() !== "UNDER PROCESS";
+  });
 
   res.status(200).json({
     success: true,
@@ -1502,7 +1870,9 @@ exports.getSettingsDashboard = catchAsyncErrors(async (req, res, next) => {
   const settingsProcess = await Process.findOne({ processId: "MR/R/002A" });
 
   if (!settingsProcess) {
-    return next(new ErrorHandler("Settings Process (MR/R/002A) not found", 404));
+    return next(
+      new ErrorHandler("Settings Process (MR/R/002A) not found", 404),
+    );
   }
 
   const { startDate, endDate } = req.query;
@@ -1549,150 +1919,188 @@ exports.getSettingsDashboard = catchAsyncErrors(async (req, res, next) => {
     success: true,
     data: {
       noOfSettings: filteredData.length,
-      averageSettingTime: settingTimeCount > 0 ? Number((totalSettingTime / settingTimeCount).toFixed(2)) : 0,
-      avgSetupLoss: setupLossCount > 0 ? Number((totalSetupLoss / setupLossCount).toFixed(2)) : 0,
+      averageSettingTime:
+        settingTimeCount > 0
+          ? Number((totalSettingTime / settingTimeCount).toFixed(2))
+          : 0,
+      avgSetupLoss:
+        setupLossCount > 0
+          ? Number((totalSetupLoss / setupLossCount).toFixed(2))
+          : 0,
     },
   });
 });
 
-exports.getCalibrationDueDashboard = catchAsyncErrors(async (req, res, next) => {
-  const calibrationProcess = await Process.findOne({ processId: "QA/R/002A" });
+exports.getCalibrationDueDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const calibrationProcess = await Process.findOne({
+      processId: "QA/R/002A",
+    });
 
-  if (!calibrationProcess) {
-    return next(new ErrorHandler("Calibration Process (QA/R/002A) not found", 404));
-  }
-
-  const filteredCalibration = calibrationProcess.data.filter((row) => {
-    const certificate = row.items.find((item) => item.key === "CERTIFICATE")?.value;
-    const date = row.items.find((item) => item.key === "DATE")?.value || row.items.find((item) => item.key === "DUE")?.value; // Supporting both DATE and DUE keys
-    
-    return (
-      certificate === "" ||
-      certificate === null ||
-      (date && Number(date) <= Date.now() - 10 * 24 * 60 * 60 * 1000)
-    );
-  });
-
-  const doneCount = filteredCalibration.filter((row) => {
-    const status = row.items.find((item) => item.key === "DONE")?.value;
-    return status?.toString().toLowerCase() !== "";
-  }).length;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayEpoch = today.getTime();
-
-  const dueCount = filteredCalibration.filter((row) => {
-    const dueValue = row.items.find((item) => item.key === "DUE")?.value;
-    if (!dueValue) return false;
-    const dueEpoch = Number(dueValue);
-    return !isNaN(dueEpoch) && dueEpoch > todayEpoch;
-  }).length;
-
-  res.status(200).json({
-    success: true,
-    data: {
-      totalFiltered: filteredCalibration.length,
-      doneCount,
-      dueCount,
-      openRecords: filteredCalibration,
-    },
-  });
-});
-
-exports.getProcessControlPlanDashboard = catchAsyncErrors(async (req, res, next) => {
-  const pcpProcess = await Process.findOne({ processId: "QA/R/009" });
-
-  if (!pcpProcess) {
-    return next(new ErrorHandler("Process Control Plan Process (QA/R/009) not found", 404));
-  }
-
-  const { startDate, endDate } = req.query;
-  let filteredData = pcpProcess.data;
-
-  const totalRecords = filteredData.length;
-  const pendingRecordsData = filteredData.filter((row) => {
-    const fileUpload = row.items.find((i) => i.key === "FILE UPLOAD")?.value;
-    return fileUpload === "" || fileUpload === null;
-  });
-
-  res.status(200).json({
-    success: true,
-    data: {
-      totalRecords,
-      pendingCount: pendingRecordsData.length,
-      pendingRecords: pendingRecordsData,
-    },
-  });
-});
-
-exports.getCertificateRenewalDashboard = catchAsyncErrors(async (req, res, next) => {
-  const certificateProcess = await Process.findOne({ processId: "QA/R/011" });
-
-  if (!certificateProcess) {
-    return next(new ErrorHandler("Certificate Renewal Process (QA/R/011) not found", 404));
-  }
-
-  const { startDate, endDate } = req.query;
-  let filteredData = certificateProcess.data;
-
-  const results = filteredData.map((row) => {
-    const items = row.items;
-    const certName = items.find((i) => i.key === "CERTIFICATE NAME")?.value || "N/A";
-    const certNo = items.find((i) => i.key === "CERTIFICATE NO ")?.value || "N/A";
-    const department = items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
-    const status = items.find((i) => i.key === "CRS-STATUS")?.value || "N/A";
-
-    // Attempt to find any date fields for due calculation
-    const dateItem = items.find((i) => 
-      i.key.toLowerCase().includes("date") || 
-      i.key.toLowerCase().includes("expiry") || 
-      i.key.toLowerCase().includes("due")
-    );
-    
-    const epoch = dateItem ? Number(dateItem.value) : null;
-    let reminder = "No date set";
-    let isDue = false;
-
-    if (epoch && !isNaN(epoch)) {
-      const daysLeft = Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysLeft < 0) {
-        reminder = `${Math.abs(daysLeft)} days overdue`;
-        isDue = true;
-      } else if (daysLeft === 0) {
-        reminder = "Expires today";
-        isDue = true;
-      } else if (daysLeft <= 30) {
-        reminder = `Due in ${daysLeft} days`;
-        isDue = true;
-      } else {
-        reminder = `${daysLeft} days remaining`;
-      }
+    if (!calibrationProcess) {
+      return next(
+        new ErrorHandler("Calibration Process (QA/R/002A) not found", 404),
+      );
     }
 
-    return {
-      certName,
-      certNo,
-      department,
-      status,
-      dueDate: epoch,
-      reminder,
-      isDue
-    };
-  });
+    const filteredCalibration = calibrationProcess.data.filter((row) => {
+      const certificate = row.items.find(
+        (item) => item.key === "CERTIFICATE",
+      )?.value;
+      const date =
+        row.items.find((item) => item.key === "DATE")?.value ||
+        row.items.find((item) => item.key === "DUE")?.value; // Supporting both DATE and DUE keys
 
-  res.status(200).json({
-    success: true,
-    data: results,
-  });
-});
+      return (
+        certificate === "" ||
+        certificate === null ||
+        (date && Number(date) <= Date.now() - 10 * 24 * 60 * 60 * 1000)
+      );
+    });
+
+    const doneCount = filteredCalibration.filter((row) => {
+      const status = row.items.find((item) => item.key === "DONE")?.value;
+      return status?.toString().toLowerCase() !== "";
+    }).length;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEpoch = today.getTime();
+
+    const dueCount = filteredCalibration.filter((row) => {
+      const dueValue = row.items.find((item) => item.key === "DUE")?.value;
+      if (!dueValue) return false;
+      const dueEpoch = Number(dueValue);
+      return !isNaN(dueEpoch) && dueEpoch > todayEpoch;
+    }).length;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalFiltered: filteredCalibration.length,
+        doneCount,
+        dueCount,
+        openRecords: filteredCalibration,
+      },
+    });
+  },
+);
+
+exports.getProcessControlPlanDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const pcpProcess = await Process.findOne({ processId: "QA/R/009" });
+
+    if (!pcpProcess) {
+      return next(
+        new ErrorHandler(
+          "Process Control Plan Process (QA/R/009) not found",
+          404,
+        ),
+      );
+    }
+
+    const { startDate, endDate } = req.query;
+    let filteredData = pcpProcess.data;
+
+    const totalRecords = filteredData.length;
+    const pendingRecordsData = filteredData.filter((row) => {
+      const fileUpload = row.items.find((i) => i.key === "FILE UPLOAD")?.value;
+      return fileUpload === "" || fileUpload === null;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalRecords,
+        pendingCount: pendingRecordsData.length,
+        pendingRecords: pendingRecordsData,
+      },
+    });
+  },
+);
+
+exports.getCertificateRenewalDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const certificateProcess = await Process.findOne({ processId: "QA/R/011" });
+
+    if (!certificateProcess) {
+      return next(
+        new ErrorHandler(
+          "Certificate Renewal Process (QA/R/011) not found",
+          404,
+        ),
+      );
+    }
+
+    const { startDate, endDate } = req.query;
+    let filteredData = certificateProcess.data;
+
+    const results = filteredData.map((row) => {
+      const items = row.items;
+      const certName =
+        items.find((i) => i.key === "CERTIFICATE NAME")?.value || "N/A";
+      const certNo =
+        items.find((i) => i.key === "CERTIFICATE NO ")?.value || "N/A";
+      const department =
+        items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
+      const status = items.find((i) => i.key === "CRS-STATUS")?.value || "N/A";
+
+      // Attempt to find any date fields for due calculation
+      const dateItem = items.find(
+        (i) =>
+          i.key.toLowerCase().includes("date") ||
+          i.key.toLowerCase().includes("expiry") ||
+          i.key.toLowerCase().includes("due"),
+      );
+
+      const epoch = dateItem ? Number(dateItem.value) : null;
+      let reminder = "No date set";
+      let isDue = false;
+
+      if (epoch && !isNaN(epoch)) {
+        const daysLeft = Math.ceil(
+          (epoch - Date.now()) / (1000 * 60 * 60 * 24),
+        );
+        if (daysLeft < 0) {
+          reminder = `${Math.abs(daysLeft)} days overdue`;
+          isDue = true;
+        } else if (daysLeft === 0) {
+          reminder = "Expires today";
+          isDue = true;
+        } else if (daysLeft <= 30) {
+          reminder = `Due in ${daysLeft} days`;
+          isDue = true;
+        } else {
+          reminder = `${daysLeft} days remaining`;
+        }
+      }
+
+      return {
+        certName,
+        certNo,
+        department,
+        status,
+        dueDate: epoch,
+        reminder,
+        isDue,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: results,
+    });
+  },
+);
 
 // 1. NPD Dashboard
 exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
   const npdProcess = await Process.findOne({ processId: "DD/R/010" });
 
   if (!npdProcess) {
-    return next(new ErrorHandler("NPD Register Process (DD/R/010) not found", 404));
+    return next(
+      new ErrorHandler("NPD Register Process (DD/R/010) not found", 404),
+    );
   }
 
   const filteredData = npdProcess.data
@@ -1712,12 +2120,21 @@ exports.getNPDDashboardDetails = catchAsyncErrors(async (req, res, next) => {
       return {
         from: items.find((i) => i.key === "FROM")?.value || "",
         date: items.find((i) => i.key === "TARGET DATE")?.value || "",
-        part: items.find((i) => i.key === "PART")?.value || items.find((i) => i.key === "PART NAME")?.value || "",
+        part:
+          items.find((i) => i.key === "PART")?.value ||
+          items.find((i) => i.key === "PART NAME")?.value ||
+          "",
         proto: items.find((i) => i.key === "PROTO")?.process || "",
         validation: items.find((i) => i.key === "VALIDATION")?.process || "",
-        master: (items.find((i) => i.key === "MASTER PIECE") || items.find((i) => i.key === "MASTER"))?.process || "",
+        master:
+          (
+            items.find((i) => i.key === "MASTER PIECE") ||
+            items.find((i) => i.key === "MASTER")
+          )?.process || "",
         due: (() => {
-          const epoch = Number(items.find((i) => i.key === "TARGET DATE")?.value);
+          const epoch = Number(
+            items.find((i) => i.key === "TARGET DATE")?.value,
+          );
           if (!epoch) return null;
           return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
         })(),
@@ -1737,18 +2154,27 @@ exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
   const BOMProcess = await Process.findOne({ processId: "DD/R/002" });
 
   if (!ProductsProcess || !BOMProcess) {
-    return next(new ErrorHandler("Product List (DD/R/001) or BOM (DD/R/002) Process not found", 404));
+    return next(
+      new ErrorHandler(
+        "Product List (DD/R/001) or BOM (DD/R/002) Process not found",
+        404,
+      ),
+    );
   }
 
   const uniqueProductParts = new Set();
   ProductsProcess.data.forEach((row) => {
-    const partNo = row.items.find((i) => i.key === "PART NO" || i.key === "PART-NO")?.value;
+    const partNo = row.items.find(
+      (i) => i.key === "PART NO" || i.key === "PART-NO",
+    )?.value;
     if (partNo) uniqueProductParts.add(partNo.trim());
   });
 
   const uniqueBOMParts = new Set();
   BOMProcess.data.forEach((row) => {
-    const partNo = row.items.find((i) => i.key === "PART NO" || i.key === "PART-NO")?.value;
+    const partNo = row.items.find(
+      (i) => i.key === "PART NO" || i.key === "PART-NO",
+    )?.value;
     if (partNo) uniqueBOMParts.add(partNo.trim());
   });
 
@@ -1762,34 +2188,49 @@ exports.getProductDashboard = catchAsyncErrors(async (req, res, next) => {
 });
 
 // 3. Revision Control Dashboard
-exports.getRevisionControlDashboard = catchAsyncErrors(async (req, res, next) => {
-  const revisionControlProcess = await Process.findOne({ processId: "DD/R/005" });
-
-  if (!revisionControlProcess) {
-    return next(new ErrorHandler("Revision Control Process (DD/R/005) not found", 404));
-  }
-
-  const filteredData = revisionControlProcess.data
-    .filter((row) => {
-      const status = row.items.find((i) => i.key === "REVISION STATUS")?.value;
-      return status === "INREVISION";
-    })
-    .map((row) => {
-      const items = row.items;
-      return {
-        partNo: items.find((i) => i.key === "PART NO" || i.key === "PART-NO")?.value || "",
-        partName: items.find((i) => i.key === "PART NAME" || i.key === "PART-NAME")?.value || "",
-        revisionStatus: items.find((i) => i.key === "REVISION STATUS")?.value || "",
-        dueDate: items.find((i) => i.key === "DUE DATE" || i.key === "DUE")?.value || "",
-      };
+exports.getRevisionControlDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const revisionControlProcess = await Process.findOne({
+      processId: "DD/R/005",
     });
 
-  res.status(200).json({
-    success: true,
-    count: filteredData.length,
-    data: filteredData,
-  });
-});
+    if (!revisionControlProcess) {
+      return next(
+        new ErrorHandler("Revision Control Process (DD/R/005) not found", 404),
+      );
+    }
+
+    const filteredData = revisionControlProcess.data
+      .filter((row) => {
+        const status = row.items.find(
+          (i) => i.key === "REVISION STATUS",
+        )?.value;
+        return status === "INREVISION";
+      })
+      .map((row) => {
+        const items = row.items;
+        return {
+          partNo:
+            items.find((i) => i.key === "PART NO" || i.key === "PART-NO")
+              ?.value || "",
+          partName:
+            items.find((i) => i.key === "PART NAME" || i.key === "PART-NAME")
+              ?.value || "",
+          revisionStatus:
+            items.find((i) => i.key === "REVISION STATUS")?.value || "",
+          dueDate:
+            items.find((i) => i.key === "DUE DATE" || i.key === "DUE")?.value ||
+            "",
+        };
+      });
+
+    res.status(200).json({
+      success: true,
+      count: filteredData.length,
+      data: filteredData,
+    });
+  },
+);
 
 // 4. OEE Dashboard
 exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
@@ -1999,7 +2440,7 @@ exports.getInhouseDashboard = catchAsyncErrors(async (req, res, next) => {
   const actionPendingRows = rejectReportProcess.data.filter((row) =>
     openActionPlans.some(
       (ap) => ap.rowDataId?.toString() === row._id.toString(),
-    )
+    ),
   );
 
   const actionPendingSum = actionPendingRows.reduce((acc, row) => {
@@ -2012,8 +2453,9 @@ exports.getInhouseDashboard = catchAsyncErrors(async (req, res, next) => {
   // 3. Rework Pending logic
   const reworkPendingRows = reworkReportProcess.data.filter(
     (row) =>
-      row.items.find((item) => item.key === "RR STATUS")?.value?.toLowerCase() ===
-      "open",
+      row.items
+        .find((item) => item.key === "RR STATUS")
+        ?.value?.toLowerCase() === "open",
   );
 
   const reworkPendingSum = reworkPendingRows.reduce((acc, row) => {
@@ -2107,12 +2549,16 @@ exports.getIncomingInspectionDashboard = catchAsyncErrors(
 
     if (!incomingInspectionProcess) {
       return next(
-        new ErrorHandler("Incoming Inspection Process (QA/R/003) not found", 404),
+        new ErrorHandler(
+          "Incoming Inspection Process (QA/R/003) not found",
+          404,
+        ),
       );
     }
     const pendingCount = incomingInspectionProcess.data.filter((row) => {
-
-      const status = row.items.find((i) => i.key === "INSPECTION-STATUS")?.value;
+      const status = row.items.find(
+        (i) => i.key === "INSPECTION-STATUS",
+      )?.value;
       return status?.toLowerCase() !== "done";
     }).length;
 
@@ -2131,7 +2577,9 @@ exports.getQualityAuditsDashboard = catchAsyncErrors(async (req, res, next) => {
   const qualityAuditsProcess = await Process.findOne({ processId: "QA/F/005" });
 
   if (!qualityAuditsProcess) {
-    return next(new ErrorHandler("Quality Audits Process (QA/F/005) not found", 404));
+    return next(
+      new ErrorHandler("Quality Audits Process (QA/F/005) not found", 404),
+    );
   }
 
   const today = new Date();
@@ -2162,9 +2610,11 @@ exports.getQualityAuditsDashboard = catchAsyncErrors(async (req, res, next) => {
   const pendingTableData = unclosedAudits.map((row) => {
     const items = row.items;
     const dateVal = items.find((i) => i.key === "DATE")?.value;
-    const department = items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
+    const department =
+      items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
     const ncValue = items.find((i) => i.key === "NC")?.value || "0";
-    const responsible = items.find((i) => i.key === "RESPONSIBLE")?.value || "N/A";
+    const responsible =
+      items.find((i) => i.key === "RESPONSIBLE")?.value || "N/A";
 
     let due = "N/A";
     if (dateVal) {
@@ -2200,157 +2650,189 @@ exports.getQualityAuditsDashboard = catchAsyncErrors(async (req, res, next) => {
 });
 
 // 10. Continuous Improvement
-exports.getContinuousImprovementDashboard = catchAsyncErrors(async (req, res, next) => {
-  // Using MR/R/005 as per the provided JSON snippet for Continuous Improvement
-  const continuousImprovementProcess = await Process.findOne({ processId: "MR/R/005" });
-
-  if (!continuousImprovementProcess) {
-    return next(new ErrorHandler("Continuous Improvement Process (MR/R/005) not found", 404));
-  }
-
-  const { startDate, endDate } = req.query;
-
-  let filteredData = continuousImprovementProcess.data;
-
-  // Filter by date if both startDate and endDate are provided
-  if (startDate && endDate) {
-    const start = Number(startDate);
-    const end = Number(endDate);
-
-    filteredData = filteredData.filter((row) => {
-      const dateItem = row.items.find((i) => i.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-      const epochMs = Number(dateItem.value);
-      return epochMs >= start && epochMs <= end;
+exports.getContinuousImprovementDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    // Using MR/R/005 as per the provided JSON snippet for Continuous Improvement
+    const continuousImprovementProcess = await Process.findOne({
+      processId: "MR/R/005",
     });
-  }
 
-  res.status(200).json({
-    success: true,
-    data: {
-      improvementCount: filteredData.length,
-    },
-  });
-});
+    if (!continuousImprovementProcess) {
+      return next(
+        new ErrorHandler(
+          "Continuous Improvement Process (MR/R/005) not found",
+          404,
+        ),
+      );
+    }
+
+    const { startDate, endDate } = req.query;
+
+    let filteredData = continuousImprovementProcess.data;
+
+    // Filter by date if both startDate and endDate are provided
+    if (startDate && endDate) {
+      const start = Number(startDate);
+      const end = Number(endDate);
+
+      filteredData = filteredData.filter((row) => {
+        const dateItem = row.items.find((i) => i.key === "DATE");
+        if (!dateItem || !dateItem.value) return false;
+        const epochMs = Number(dateItem.value);
+        return epochMs >= start && epochMs <= end;
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        improvementCount: filteredData.length,
+      },
+    });
+  },
+);
 
 // 11. Employee Overhead Dashboard
-exports.getEmployeeOverheadDashboard = catchAsyncErrors(async (req, res, next) => {
-  const employeeHistoryProcess = await Process.findOne({ processId: "HR/R/001" });
-
-  if (!employeeHistoryProcess) {
-    return next(new ErrorHandler("Employee History Process (HR/R/001) not found", 404));
-  }
-
-  const { department } = req.query;
-
-  // Actual OverHead = Count of active employees
-  let activeEmployees = employeeHistoryProcess.data.filter((row) => {
-    const relievingDate = row.items.find((i) => i.key === "DATE OF RELELIVING")?.value;
-    return !relievingDate || relievingDate === "";
-  });
-
-  if (department) {
-    activeEmployees = activeEmployees.filter((row) => {
-      const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value;
-      return dept?.toLowerCase() === department.toLowerCase();
+exports.getEmployeeOverheadDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const employeeHistoryProcess = await Process.findOne({
+      processId: "HR/R/001",
     });
-  }
 
-  res.status(200).json({
-    success: true,
-    data: {
-      actualOverHead: activeEmployees.length,
-    },
-  });
-});
+    if (!employeeHistoryProcess) {
+      return next(
+        new ErrorHandler("Employee History Process (HR/R/001) not found", 404),
+      );
+    }
+
+    const { department } = req.query;
+
+    // Actual OverHead = Count of active employees
+    let activeEmployees = employeeHistoryProcess.data.filter((row) => {
+      const relievingDate = row.items.find(
+        (i) => i.key === "DATE OF RELELIVING",
+      )?.value;
+      return !relievingDate || relievingDate === "";
+    });
+
+    if (department) {
+      activeEmployees = activeEmployees.filter((row) => {
+        const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value;
+        return dept?.toLowerCase() === department.toLowerCase();
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        actualOverHead: activeEmployees.length,
+      },
+    });
+  },
+);
 
 // 12. Employee Attendance % (Department Wise % for Pie Chart)
-exports.getEmployeeAttendanceDashboard = catchAsyncErrors(async (req, res, next) => {
-  const employeeHistoryProcess = await Process.findOne({ processId: "HR/R/001" });
+exports.getEmployeeAttendanceDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    const employeeHistoryProcess = await Process.findOne({
+      processId: "HR/R/001",
+    });
 
-  if (!employeeHistoryProcess) {
-    return next(new ErrorHandler("Employee History Process (HR/R/001) not found", 404));
-  }
+    if (!employeeHistoryProcess) {
+      return next(
+        new ErrorHandler("Employee History Process (HR/R/001) not found", 404),
+      );
+    }
 
-  const { startDate, endDate } = req.query;
+    const { startDate, endDate } = req.query;
 
-  // Filter active employees within the date range
-  const now = Date.now();
-  const effectiveStart = startDate ? Number(startDate) : 0;
-  const effectiveEnd = endDate ? Number(endDate) : now;
+    // Filter active employees within the date range
+    const now = Date.now();
+    const effectiveStart = startDate ? Number(startDate) : 0;
+    const effectiveEnd = endDate ? Number(endDate) : now;
 
-  let activeDuringRange = employeeHistoryProcess.data.filter((row) => {
-    const joinValue = row.items.find((i) => i.key === "DATE OF JOINING")?.value;
-    const reliefValue = row.items.find((i) => i.key === "DATE OF RELELIVING")?.value;
+    let activeDuringRange = employeeHistoryProcess.data.filter((row) => {
+      const joinValue = row.items.find(
+        (i) => i.key === "DATE OF JOINING",
+      )?.value;
+      const reliefValue = row.items.find(
+        (i) => i.key === "DATE OF RELELIVING",
+      )?.value;
 
-    const joinEpoch = Number(joinValue);
-    const reliefEpoch = reliefValue ? Number(reliefValue) : Infinity;
+      const joinEpoch = Number(joinValue);
+      const reliefEpoch = reliefValue ? Number(reliefValue) : Infinity;
 
-    // Check if employee tenure overlaps with the range
-    return joinEpoch <= effectiveEnd && reliefEpoch >= effectiveStart;
-  });
+      // Check if employee tenure overlaps with the range
+      return joinEpoch <= effectiveEnd && reliefEpoch >= effectiveStart;
+    });
 
-  // Calculate department distribution
-  const departmentStats = {};
-  activeDuringRange.forEach((row) => {
-    const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value || "Unassigned";
-    departmentStats[dept] = (departmentStats[dept] || 0) + 1;
-  });
+    // Calculate department distribution
+    const departmentStats = {};
+    activeDuringRange.forEach((row) => {
+      const dept =
+        row.items.find((i) => i.key === "DEPARTMENT")?.value || "Unassigned";
+      departmentStats[dept] = (departmentStats[dept] || 0) + 1;
+    });
 
-  const total = activeDuringRange.length;
-  const chartData = Object.entries(departmentStats).map(([label, count]) => {
-    const percentage = total > 0 ? (count / total) * 100 : 0;
-    return {
-      label,
-      value: count,
-      percentage: Number(percentage.toFixed(2)),
-    };
-  });
+    const total = activeDuringRange.length;
+    const chartData = Object.entries(departmentStats).map(([label, count]) => {
+      const percentage = total > 0 ? (count / total) * 100 : 0;
+      return {
+        label,
+        value: count,
+        percentage: Number(percentage.toFixed(2)),
+      };
+    });
 
-  res.status(200).json({
-    success: true,
-    data: chartData,
-  });
-});
+    res.status(200).json({
+      success: true,
+      data: chartData,
+    });
+  },
+);
 
 // 13. Procurement Register
-exports.getProcurementRegisterDashboard = catchAsyncErrors(async (req, res, next) => {
-  // Using PR/R/003 as per the provided JSON snippet for Procurement Register
-  const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+exports.getProcurementRegisterDashboard = catchAsyncErrors(
+  async (req, res, next) => {
+    // Using PR/R/003 as per the provided JSON snippet for Procurement Register
+    const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
 
-  if (!procurementProcess) {
-    return next(new ErrorHandler("Procurement Process (PR/R/003) not found", 404));
-  }
+    if (!procurementProcess) {
+      return next(
+        new ErrorHandler("Procurement Process (PR/R/003) not found", 404),
+      );
+    }
 
-  const { startDate, endDate } = req.query;
+    const { startDate, endDate } = req.query;
 
-  // 1. Initial status filter: PR STATUS === "PENDING"
-  let filteredData = procurementProcess.data.filter((row) => {
-    const status = row.items.find((i) => i.key === "PR STATUS")?.value;
-    return status?.toUpperCase() !== "CLOSED";
-  });
-
-  // 2. Filter by date if both startDate and endDate are provided
-  if (startDate && endDate) {
-    const start = Number(startDate);
-    const end = Number(endDate);
-
-    filteredData = filteredData.filter((row) => {
-      const dateItem = row.items.find((i) => i.key === "DATE");
-      if (!dateItem || !dateItem.value) return false;
-      const epochMs = Number(dateItem.value);
-      return epochMs >= start && epochMs <= end;
+    // 1. Initial status filter: PR STATUS === "PENDING"
+    let filteredData = procurementProcess.data.filter((row) => {
+      const status = row.items.find((i) => i.key === "PR STATUS")?.value;
+      return status?.toUpperCase() !== "CLOSED";
     });
-  }
 
-  res.status(200).json({
-    success: true,
-    data: {
-      totalPending: filteredData.length,
-      pendingRecords: filteredData,
-    },
-  });
-});
+    // 2. Filter by date if both startDate and endDate are provided
+    if (startDate && endDate) {
+      const start = Number(startDate);
+      const end = Number(endDate);
+
+      filteredData = filteredData.filter((row) => {
+        const dateItem = row.items.find((i) => i.key === "DATE");
+        if (!dateItem || !dateItem.value) return false;
+        const epochMs = Number(dateItem.value);
+        return epochMs >= start && epochMs <= end;
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalPending: filteredData.length,
+        pendingRecords: filteredData,
+      },
+    });
+  },
+);
 
 // 14. Inward Dashboard
 exports.getInwardDashboard = catchAsyncErrors(async (req, res, next) => {
@@ -2395,7 +2877,9 @@ exports.getInwardDashboard = catchAsyncErrors(async (req, res, next) => {
 exports.getSalesCustomerCount = catchAsyncErrors(async (req, res, next) => {
   const customerListProcess = await Process.findOne({ processId: "MS/R/004" });
   if (!customerListProcess) {
-    return next(new ErrorHandler("Customer List Process (MS/R/004) not found", 404));
+    return next(
+      new ErrorHandler("Customer List Process (MS/R/004) not found", 404),
+    );
   }
   res.status(200).json({
     success: true,
@@ -2407,7 +2891,9 @@ exports.getSalesCustomerCount = catchAsyncErrors(async (req, res, next) => {
 exports.getSalesTrend = catchAsyncErrors(async (req, res, next) => {
   const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
   if (!orderListProcess) {
-    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
+    return next(
+      new ErrorHandler("Order List Process (MS/R/006) not found", 404),
+    );
   }
   const { startDate, endDate } = req.query;
   const effectiveStart = startDate ? Number(startDate) : 0;
@@ -2415,8 +2901,12 @@ exports.getSalesTrend = catchAsyncErrors(async (req, res, next) => {
 
   const salesTrend = {};
   orderListProcess.data.forEach((row) => {
-    const dateVal = row.items.find((i) => i.key === "DATE" || i.key === "ORDER DATE")?.value;
-    const value = parseFloat(row.items.find((i) => i.key === "VALUE")?.value || 0);
+    const dateVal = row.items.find(
+      (i) => i.key === "DATE" || i.key === "ORDER DATE",
+    )?.value;
+    const value = parseFloat(
+      row.items.find((i) => i.key === "VALUE")?.value || 0,
+    );
     if (dateVal && !isNaN(value)) {
       const date = new Date(Number(dateVal));
       if (date.getTime() >= effectiveStart && date.getTime() <= effectiveEnd) {
@@ -2428,7 +2918,10 @@ exports.getSalesTrend = catchAsyncErrors(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    data: Object.entries(salesTrend).map(([month, value]) => ({ month, value })),
+    data: Object.entries(salesTrend).map(([month, value]) => ({
+      month,
+      value,
+    })),
   });
 });
 
@@ -2436,11 +2929,14 @@ exports.getSalesTrend = catchAsyncErrors(async (req, res, next) => {
 exports.getQuotationStatus = catchAsyncErrors(async (req, res, next) => {
   const quotationListProcess = await Process.findOne({ processId: "MS/R/005" });
   if (!quotationListProcess) {
-    return next(new ErrorHandler("Quotation List Process (MS/R/005) not found", 404));
+    return next(
+      new ErrorHandler("Quotation List Process (MS/R/005) not found", 404),
+    );
   }
   const quotationStatus = {};
   quotationListProcess.data.forEach((row) => {
-    const status = row.items.find((i) => i.key === "QL STATUS")?.value || "UNKNOWN";
+    const status =
+      row.items.find((i) => i.key === "QL STATUS")?.value || "UNKNOWN";
     quotationStatus[status] = (quotationStatus[status] || 0) + 1;
   });
   res.status(200).json({
@@ -2453,13 +2949,17 @@ exports.getQuotationStatus = catchAsyncErrors(async (req, res, next) => {
 exports.getSalesOrderDetails = catchAsyncErrors(async (req, res, next) => {
   const orderListProcess = await Process.findOne({ processId: "MS/R/006" });
   if (!orderListProcess) {
-    return next(new ErrorHandler("Order List Process (MS/R/006) not found", 404));
+    return next(
+      new ErrorHandler("Order List Process (MS/R/006) not found", 404),
+    );
   }
   let totalOrderQty = 0;
   let totalPendingQty = 0;
   orderListProcess.data.forEach((row) => {
     const qty = parseFloat(row.items.find((i) => i.key === "QTY")?.value || 0);
-    const pendingQty = parseFloat(row.items.find((i) => i.key === "PENDING QTY")?.value || 0);
+    const pendingQty = parseFloat(
+      row.items.find((i) => i.key === "PENDING QTY")?.value || 0,
+    );
     totalOrderQty += isNaN(qty) ? 0 : qty;
     totalPendingQty += isNaN(pendingQty) ? 0 : pendingQty;
   });
@@ -2470,51 +2970,69 @@ exports.getSalesOrderDetails = catchAsyncErrors(async (req, res, next) => {
 });
 
 // 19. Sales Dashboard - Payment and Delivery
-exports.getSalesPaymentAndDelivery = catchAsyncErrors(async (req, res, next) => {
-  const docketsProcess = await Process.findOne({ processId: "MS/R/006A" });
-  if (!docketsProcess) {
-    return next(new ErrorHandler("Dockets Process (MS/R/006A) not found", 404));
-  }
-
-  let paymentPendingCount = 0;
-  let totalLeadTime = 0;
-  let leadTimeCount = 0;
-
-  docketsProcess.data.forEach((row) => {
-    const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
-    if (payment && (payment.toUpperCase() === "OPEN" || payment.toUpperCase() === "PENDING")) {
-      paymentPendingCount++;
+exports.getSalesPaymentAndDelivery = catchAsyncErrors(
+  async (req, res, next) => {
+    const docketsProcess = await Process.findOne({ processId: "MS/R/006A" });
+    if (!docketsProcess) {
+      return next(
+        new ErrorHandler("Dockets Process (MS/R/006A) not found", 404),
+      );
     }
 
-    const orderDateVal = row.items.find((i) => i.key === "ORDER DATE")?.value;
-    const deliveryDateVal = row.items.find((i) => i.key === "DELIVERY DATE")?.value;
-    if (orderDateVal && deliveryDateVal) {
-      const diff = (Number(deliveryDateVal) - Number(orderDateVal)) / (1000 * 60 * 60 * 24);
-      if (diff >= 0) {
-        totalLeadTime += diff;
-        leadTimeCount++;
+    let paymentPendingCount = 0;
+    let totalLeadTime = 0;
+    let leadTimeCount = 0;
+
+    docketsProcess.data.forEach((row) => {
+      const payment = row.items.find((i) => i.key === "PAYMENT")?.value;
+      if (
+        payment &&
+        (payment.toUpperCase() === "OPEN" ||
+          payment.toUpperCase() === "PENDING")
+      ) {
+        paymentPendingCount++;
       }
-    }
-  });
 
-  res.status(200).json({
-    success: true,
-    data: {
-      paymentPendingCount,
-      averageLeadTime: leadTimeCount > 0 ? Number((totalLeadTime / leadTimeCount).toFixed(1)) : 0,
-    },
-  });
-});
+      const orderDateVal = row.items.find((i) => i.key === "ORDER DATE")?.value;
+      const deliveryDateVal = row.items.find(
+        (i) => i.key === "DELIVERY DATE",
+      )?.value;
+      if (orderDateVal && deliveryDateVal) {
+        const diff =
+          (Number(deliveryDateVal) - Number(orderDateVal)) /
+          (1000 * 60 * 60 * 24);
+        if (diff >= 0) {
+          totalLeadTime += diff;
+          leadTimeCount++;
+        }
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        paymentPendingCount,
+        averageLeadTime:
+          leadTimeCount > 0
+            ? Number((totalLeadTime / leadTimeCount).toFixed(1))
+            : 0,
+      },
+    });
+  },
+);
 
 // 20. Sales Dashboard - Trail Status
 exports.getSalesTrailStatus = catchAsyncErrors(async (req, res, next) => {
   const customerTrailProcess = await Process.findOne({ processId: "MS/R/001" });
   if (!customerTrailProcess) {
-    return next(new ErrorHandler("Customer Trail Process (MS/R/001) not found", 404));
+    return next(
+      new ErrorHandler("Customer Trail Process (MS/R/001) not found", 404),
+    );
   }
   const trailStatus = {};
   customerTrailProcess.data.forEach((row) => {
-    const status = row.items.find((i) => i.key.includes("STATUS"))?.value || "UNKNOWN";
+    const status =
+      row.items.find((i) => i.key.includes("STATUS"))?.value || "UNKNOWN";
     trailStatus[status] = (trailStatus[status] || 0) + 1;
   });
   res.status(200).json({
@@ -2522,4 +3040,3 @@ exports.getSalesTrailStatus = catchAsyncErrors(async (req, res, next) => {
     data: trailStatus,
   });
 });
-
