@@ -726,7 +726,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
   }
 
   // Update row data
-  const previousItems = row.items;
+  const previousItems = oldData?.items || JSON.parse(JSON.stringify(row.items));
   row.items = items;
   process.updatedBy = req.user._id;
 

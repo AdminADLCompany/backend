@@ -1272,6 +1272,91 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           await rejectionReportProcess.save();
         }
       }
+    } else if (process.processId === "ST/R/005") {
+      const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
+      if (!stockDataProcess) {
+        return {
+          success: false,
+          message: "Stock Data Process (ST/R/006) not found",
+          statusCode: 404,
+        };
+      }
+
+      const itemCategory = (items.find((i) => i.key === "ITEM CATEGORY")?.value || "").toString().trim();
+      const itemCode = (items.find((i) => i.key === "ITEM CODE")?.value || "").toString().trim();
+      const itemName = (items.find((i) => i.key === "ITEM NAME")?.value || "").toString().trim();
+      const inOut = (items.find((i) => i.key === "IN / OUT" || i.key === "IN/OUT")?.value || "").toString().trim().toUpperCase();
+      const qty = parseFloat(items.find((i) => i.key === "QTY")?.value || 0) || 0;
+
+      if (!itemCode) return { success: true };
+
+      let stockRow = stockDataProcess.data.find((r) => {
+        const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+        const rCategory = (r.items.find((i) => i.key.trim() === "ITEM CATEGORY")?.value || "").toString().trim();
+        if (itemCategory) {
+          return rCode.toLowerCase() === itemCode.toLowerCase() && rCategory.toLowerCase() === itemCategory.toLowerCase();
+        }
+        return rCode.toLowerCase() === itemCode.toLowerCase();
+      });
+
+      if (!stockRow) {
+        stockRow = stockDataProcess.data.find((r) => {
+          const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+          return rCode.toLowerCase() === itemCode.toLowerCase();
+        });
+      }
+
+      if (stockRow) {
+        let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
+        let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
+        let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
+
+        if (!inItem) {
+          inItem = { key: "IN", value: "0", process: "value" };
+          stockRow.items.push(inItem);
+        }
+        if (!outItem) {
+          outItem = { key: "OUT", value: "0", process: "value" };
+          stockRow.items.push(outItem);
+        }
+        if (!stockItem) {
+          stockItem = { key: "STOCK", value: "0", process: "value" };
+          stockRow.items.push(stockItem);
+        }
+
+        let currentIn = parseFloat(inItem.value || 0) || 0;
+        let currentOut = parseFloat(outItem.value || 0) || 0;
+
+        if (inOut === "IN") {
+          currentIn += qty;
+          inItem.value = currentIn.toString();
+        } else if (inOut === "OUT") {
+          currentOut += qty;
+          outItem.value = currentOut.toString();
+        }
+
+        stockItem.value = (currentIn - currentOut).toString();
+      } else {
+        const initialIn = inOut === "IN" ? qty : 0;
+        const initialOut = inOut === "OUT" ? qty : 0;
+        const initialStock = initialIn - initialOut;
+
+        stockDataProcess.data.push({
+          items: [
+            { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
+            { key: "ITEM CODE", value: itemCode, process: "value" },
+            { key: "ITEM NAME", value: itemName, process: "value" },
+            { key: "IN", value: initialIn.toString(), process: "value" },
+            { key: "OUT", value: initialOut.toString(), process: "value" },
+            { key: "STOCK", value: initialStock.toString(), process: "value" },
+          ],
+          rowDataId,
+        });
+      }
+
+      stockDataProcess.markModified("data");
+      stockDataProcess.updatedBy = userId;
+      await stockDataProcess.save();
     }
 
     return { success: true };
@@ -2560,6 +2645,188 @@ exports.handleUpdateIntersection = async (
           await rejectionReportProcess.save();
         }
       }
+    } else if (process.processId === "ST/R/005") {
+      const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
+      if (!stockDataProcess) {
+        return {
+          success: false,
+          message: "Stock Data Process (ST/R/006) not found",
+          statusCode: 404,
+        };
+      }
+
+      const prevItems = Array.isArray(previousItems) ? previousItems : [];
+      const prevItemCategory = (prevItems.find((i) => i.key === "ITEM CATEGORY")?.value || "").toString().trim();
+      const prevItemCode = (prevItems.find((i) => i.key === "ITEM CODE")?.value || "").toString().trim();
+      const prevInOut = (prevItems.find((i) => i.key === "IN / OUT" || i.key === "IN/OUT")?.value || "").toString().trim().toUpperCase();
+      const prevQty = parseFloat(prevItems.find((i) => i.key === "QTY")?.value || 0) || 0;
+
+      const newItemCategory = (items.find((i) => i.key === "ITEM CATEGORY")?.value || "").toString().trim();
+      const newItemCode = (items.find((i) => i.key === "ITEM CODE")?.value || "").toString().trim();
+      const newItemName = (items.find((i) => i.key === "ITEM NAME")?.value || "").toString().trim();
+      const newInOut = (items.find((i) => i.key === "IN / OUT" || i.key === "IN/OUT")?.value || "").toString().trim().toUpperCase();
+      const newQty = parseFloat(items.find((i) => i.key === "QTY")?.value || 0) || 0;
+
+      const findStockRow = (code, category) => {
+        if (!code) return null;
+        let match = stockDataProcess.data.find((r) => {
+          const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+          const rCategory = (r.items.find((i) => i.key.trim() === "ITEM CATEGORY")?.value || "").toString().trim();
+          if (category) {
+            return rCode.toLowerCase() === code.toLowerCase() && rCategory.toLowerCase() === category.toLowerCase();
+          }
+          return rCode.toLowerCase() === code.toLowerCase();
+        });
+        if (!match) {
+          match = stockDataProcess.data.find((r) => {
+            const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+            return rCode.toLowerCase() === code.toLowerCase();
+          });
+        }
+        return match;
+      };
+
+      const isSameItem =
+        prevItemCode &&
+        newItemCode &&
+        prevItemCode.toLowerCase() === newItemCode.toLowerCase() &&
+        (!prevItemCategory || !newItemCategory || prevItemCategory.toLowerCase() === newItemCategory.toLowerCase());
+
+      if (isSameItem) {
+        let stockRow = findStockRow(newItemCode, newItemCategory);
+        if (stockRow) {
+          let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
+          let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
+          let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
+
+          if (!inItem) {
+            inItem = { key: "IN", value: "0", process: "value" };
+            stockRow.items.push(inItem);
+          }
+          if (!outItem) {
+            outItem = { key: "OUT", value: "0", process: "value" };
+            stockRow.items.push(outItem);
+          }
+          if (!stockItem) {
+            stockItem = { key: "STOCK", value: "0", process: "value" };
+            stockRow.items.push(stockItem);
+          }
+
+          let currentIn = parseFloat(inItem.value || 0) || 0;
+          let currentOut = parseFloat(outItem.value || 0) || 0;
+
+          // Revert previous contribution
+          if (prevInOut === "IN") {
+            currentIn -= prevQty;
+          } else if (prevInOut === "OUT") {
+            currentOut -= prevQty;
+          }
+
+          // Apply new contribution
+          if (newInOut === "IN") {
+            currentIn += newQty;
+          } else if (newInOut === "OUT") {
+            currentOut += newQty;
+          }
+
+          inItem.value = currentIn.toString();
+          outItem.value = currentOut.toString();
+          stockItem.value = (currentIn - currentOut).toString();
+        } else if (newItemCode) {
+          const initialIn = newInOut === "IN" ? newQty : 0;
+          const initialOut = newInOut === "OUT" ? newQty : 0;
+          const initialStock = initialIn - initialOut;
+
+          stockDataProcess.data.push({
+            items: [
+              { key: "ITEM CATEGORY", value: newItemCategory, process: "value" },
+              { key: "ITEM CODE", value: newItemCode, process: "value" },
+              { key: "ITEM NAME", value: newItemName, process: "value" },
+              { key: "IN", value: initialIn.toString(), process: "value" },
+              { key: "OUT", value: initialOut.toString(), process: "value" },
+              { key: "STOCK", value: initialStock.toString(), process: "value" },
+            ],
+            rowDataId: row.rowDataId || rowId,
+          });
+        }
+      } else {
+        // Revert previous contribution from previous item's stock row
+        if (prevItemCode) {
+          let prevStockRow = findStockRow(prevItemCode, prevItemCategory);
+          if (prevStockRow) {
+            let inItem = prevStockRow.items.find((i) => i.key.trim() === "IN");
+            let outItem = prevStockRow.items.find((i) => i.key.trim() === "OUT");
+            let stockItem = prevStockRow.items.find((i) => i.key.trim() === "STOCK");
+
+            let currentIn = parseFloat(inItem?.value || 0) || 0;
+            let currentOut = parseFloat(outItem?.value || 0) || 0;
+
+            if (prevInOut === "IN") {
+              currentIn -= prevQty;
+              if (inItem) inItem.value = currentIn.toString();
+            } else if (prevInOut === "OUT") {
+              currentOut -= prevQty;
+              if (outItem) outItem.value = currentOut.toString();
+            }
+            if (stockItem) stockItem.value = (currentIn - currentOut).toString();
+          }
+        }
+
+        // Apply new contribution to new item's stock row
+        if (newItemCode) {
+          let newStockRow = findStockRow(newItemCode, newItemCategory);
+          if (newStockRow) {
+            let inItem = newStockRow.items.find((i) => i.key.trim() === "IN");
+            let outItem = newStockRow.items.find((i) => i.key.trim() === "OUT");
+            let stockItem = newStockRow.items.find((i) => i.key.trim() === "STOCK");
+
+            if (!inItem) {
+              inItem = { key: "IN", value: "0", process: "value" };
+              newStockRow.items.push(inItem);
+            }
+            if (!outItem) {
+              outItem = { key: "OUT", value: "0", process: "value" };
+              newStockRow.items.push(outItem);
+            }
+            if (!stockItem) {
+              stockItem = { key: "STOCK", value: "0", process: "value" };
+              newStockRow.items.push(stockItem);
+            }
+
+            let currentIn = parseFloat(inItem.value || 0) || 0;
+            let currentOut = parseFloat(outItem.value || 0) || 0;
+
+            if (newInOut === "IN") {
+              currentIn += newQty;
+              inItem.value = currentIn.toString();
+            } else if (newInOut === "OUT") {
+              currentOut += newQty;
+              outItem.value = currentOut.toString();
+            }
+            stockItem.value = (currentIn - currentOut).toString();
+          } else {
+            const initialIn = newInOut === "IN" ? newQty : 0;
+            const initialOut = newInOut === "OUT" ? newQty : 0;
+            const initialStock = initialIn - initialOut;
+
+            stockDataProcess.data.push({
+              items: [
+                { key: "ITEM CATEGORY", value: newItemCategory, process: "value" },
+                { key: "ITEM CODE", value: newItemCode, process: "value" },
+                { key: "ITEM NAME", value: newItemName, process: "value" },
+                { key: "IN", value: initialIn.toString(), process: "value" },
+                { key: "OUT", value: initialOut.toString(), process: "value" },
+                { key: "STOCK", value: initialStock.toString(), process: "value" },
+              ],
+              rowDataId: row.rowDataId || rowId,
+            });
+          }
+        }
+      }
+
+      stockDataProcess.markModified("data");
+      stockDataProcess.updatedBy = userId;
+      await stockDataProcess.save();
     } else {
       return { success: true };
     }
@@ -2793,6 +3060,58 @@ exports.handleDeleteIntersection = async (
           }
           orderProcess.markModified("data");
           await orderProcess.save();
+        }
+      }
+    }
+
+    // ---- ST/R/005 → ST/R/006 ---- Store Register -> Stock Data
+    else if (process.processId === "ST/R/005") {
+      const stockDataProcess = await Process.findOne({ processId: "ST/R/006" });
+      if (stockDataProcess && currentRow && Array.isArray(currentRow.items)) {
+        const itemCategory = (currentRow.items.find((i) => i.key === "ITEM CATEGORY")?.value || "").toString().trim();
+        const itemCode = (currentRow.items.find((i) => i.key === "ITEM CODE")?.value || "").toString().trim();
+        const inOut = (currentRow.items.find((i) => i.key === "IN / OUT" || i.key === "IN/OUT")?.value || "").toString().trim().toUpperCase();
+        const qty = parseFloat(currentRow.items.find((i) => i.key === "QTY")?.value || 0) || 0;
+
+        if (itemCode) {
+          let stockRow = stockDataProcess.data.find((r) => {
+            const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+            const rCategory = (r.items.find((i) => i.key.trim() === "ITEM CATEGORY")?.value || "").toString().trim();
+            if (itemCategory) {
+              return rCode.toLowerCase() === itemCode.toLowerCase() && rCategory.toLowerCase() === itemCategory.toLowerCase();
+            }
+            return rCode.toLowerCase() === itemCode.toLowerCase();
+          });
+
+          if (!stockRow) {
+            stockRow = stockDataProcess.data.find((r) => {
+              const rCode = (r.items.find((i) => i.key.trim() === "ITEM CODE")?.value || "").toString().trim();
+              return rCode.toLowerCase() === itemCode.toLowerCase();
+            });
+          }
+
+          if (stockRow) {
+            let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
+            let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
+            let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
+
+            let currentIn = parseFloat(inItem?.value || 0) || 0;
+            let currentOut = parseFloat(outItem?.value || 0) || 0;
+
+            if (inOut === "IN") {
+              currentIn -= qty;
+              if (inItem) inItem.value = currentIn.toString();
+            } else if (inOut === "OUT") {
+              currentOut -= qty;
+              if (outItem) outItem.value = currentOut.toString();
+            }
+
+            if (stockItem) stockItem.value = (currentIn - currentOut).toString();
+
+            stockDataProcess.markModified("data");
+            stockDataProcess.updatedBy = userId;
+            await stockDataProcess.save();
+          }
         }
       }
     }
