@@ -2,7 +2,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "set NODE_ENV=development& nodemon server.js",
-    "prod": "set NODE_ENV=production& nodemon server.js"
+    "prod": "set NODE_ENV=production& nodemon server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "migrate:images": "node scripts/migrateCloudinaryImages.js"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.17.0",
     "multer": "^2.0.2",

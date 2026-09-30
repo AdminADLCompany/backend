@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# secrets (copy config/config.env.example to config/config.env)
+config/config.env
+.env
+
+# local data
+uploads/
+exports/
+scripts/output/
+
+# logs
+logs/
+*.log
+npm-debug.log*

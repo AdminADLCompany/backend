@@ -2,8 +2,13 @@ const { MongoClient } = require("mongodb");
 const fs = require("fs");
 const path = require("path");
 
-// --- Update your source connection URI ---
-const sourceUri = "mongodb+srv://Ashraf:venture06ashu@adlcompany.h7xol5k.mongodb.net/test?retryWrites=true&w=majority";
+require("dotenv").config({ path: path.join(__dirname, "..", "config", "config.env") });
+
+const sourceUri = process.env.EXPORT_SOURCE_URI;
+if (!sourceUri) {
+  console.error("Set EXPORT_SOURCE_URI (in config/config.env or the shell) before running this script.");
+  process.exit(1);
+}
 
 // output folder
 const exportDir = path.join(__dirname, "exports");

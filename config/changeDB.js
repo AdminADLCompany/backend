@@ -1,7 +1,15 @@
+const path = require("path");
 const { MongoClient } = require("mongodb");
 
-const sourceUri = "mongodb+srv://Ashraf:venture06ashu@adlcompany.h7xol5k.mongodb.net/test?retryWrites=true&w=majority";
-const destUri   = "mongodb+srv://production_db_admin:yafatha921%40@adlcompanydatabaseone.lr5kbjq.mongodb.net/adlCompanyServer1?retryWrites=true&w=majority";
+require("dotenv").config({ path: path.join(__dirname, "config.env") });
+
+// WARNING: this script clears every destination collection before copying.
+const sourceUri = process.env.MIGRATE_SOURCE_URI;
+const destUri   = process.env.MIGRATE_DEST_URI;
+if (!sourceUri || !destUri) {
+  console.error("Set MIGRATE_SOURCE_URI and MIGRATE_DEST_URI (in config/config.env or the shell) before running this script.");
+  process.exit(1);
+}
 
 // Safe TLS options
 const clientOptions = {

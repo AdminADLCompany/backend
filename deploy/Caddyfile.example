@@ -1,0 +1,32 @@
+# Copy to C:\caddy\Caddyfile on the customer server and replace 192.168.1.50
+# with the server's reserved LAN IP. Validate with:  caddy validate --config C:\caddy\Caddyfile
+{
+	# Keeps Caddy's local CA (root.crt / root.key) and certificates with the ADL data.
+	# Back this folder up: losing root.key means reinstalling a new CA on every client PC.
+	storage file_system D:/ADLData/caddy
+
+	# The root CA is installed on client PCs manually (certutil), not by Caddy.
+	skip_install_trust
+
+	# No HTTP listener on port 80; only the HTTPS port below is used.
+	auto_https disable_redirects
+
+	# Admin API stays on the loopback interface.
+	admin localhost:2019
+}
+
+https://192.168.1.50:5443, https://localhost:5443 {
+	tls internal
+
+	encode gzip
+
+	# Node/Express listens only on the loopback interface (HOST=127.0.0.1, PORT=5000).
+	reverse_proxy 127.0.0.1:5000
+
+	log {
+		output file D:/ADLData/logs/caddy-access.log {
+			roll_size 10MiB
+			roll_keep 10
+		}
+	}
+}

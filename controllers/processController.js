@@ -5,7 +5,7 @@ const History = require("../models/history");
 
 const ErrorHandler = require("../utils/errorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
-const cloudinary = require("../config/cloudinary");
+const storage = require("../services/storage");
 const { sceduledLoss } = require("../utils/constants");
 const {
   handleAddIntersection,
@@ -188,10 +188,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
     for (const item of items) {
       if (ImageUploadArray.includes(item.key) && req.files?.[item.key]) {
         const file = req.files[item.key][0];
-        const upload = await cloudinary.uploader.upload(file.path, {
-          folder: "process_images",
-        });
-        item.value = upload.secure_url;
+        item.value = await storage.saveFile(file);
       }
     }
 
@@ -489,10 +486,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
       req.files[items[i].key]
     ) {
       const file = req.files[items[i].key][0];
-      const result = await cloudinary.uploader.upload(file.path, {
-        folder: "process_images",
-      });
-      items[i].value = result.secure_url;
+      items[i].value = await storage.saveFile(file);
     }
   }
 

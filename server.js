@@ -1,18 +1,20 @@
+const path = require('path');
 const dotenv = require('dotenv');
 
+// Config must load before anything reads process.env
+dotenv.config({ path: path.join(__dirname, 'config', 'config.env') });
+
 const app = require('./app');
-const PORT = process.env.PORT || 3008;
 const connectDatabase = require('./config/database');
 
-
-// Config
-dotenv.config({ path: 'config/config.env' });
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 connectDatabase();
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`Server is started on port ${PORT} in ${process.env.NODE_ENV} mode`);
+app.listen(PORT, HOST, () => {
+    console.log(`Server is started on http://${HOST}:${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
 process.on('uncaughtException', err => {
