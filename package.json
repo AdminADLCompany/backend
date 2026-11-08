@@ -4,7 +4,8 @@
     "dev": "set NODE_ENV=development& nodemon server.js",
     "prod": "set NODE_ENV=production& nodemon server.js",
     "pm2:start": "pm2 start ecosystem.config.js",
-    "migrate:images": "node scripts/migrateCloudinaryImages.js"
+    "migrate:images": "node scripts/migrateCloudinaryImages.js",
+    "script:up": "node scripts/scriptUp.js"
   },
   "keywords": [],
   "author": "",
