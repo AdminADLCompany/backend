@@ -386,10 +386,7 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
           );
           const pendingQty = orderQty - totalDeliveryQty;
 
-          const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
-          if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
-
-          // update orderRow's PENDING QTY
+          // PENDING QTY lives on Order List only (not Dockets headers)
           const orderPendingQtyItem = orderRow.items.find(
             (item) => item.key === "PENDING QTY",
           );
@@ -745,10 +742,7 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         );
         const pendingQty = orderQty - totalDeliveryQty;
 
-        const pendingQtyItem = items.find((i) => i.key === "PENDING QTY");
-        if (pendingQtyItem) pendingQtyItem.value = String(pendingQty);
-
-        // update orderRow's PENDING QTY
+        // PENDING QTY lives on Order List only (not Dockets headers)
         const orderPendingQtyItem = orderRow.items.find(
           (item) => item.key === "PENDING QTY",
         );

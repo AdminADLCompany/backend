@@ -40,8 +40,9 @@ const setOrPushItem = (items, key, value, processType = "value") => {
 };
 
 /**
- * After docket create/update: sync PENDING QTY on order + docket, copy identity fields,
- * and CLOSE the order when pending <= 0.
+ * After docket create/update: sync PENDING QTY on Order List only, copy identity fields
+ * onto the docket items, and CLOSE the order when pending <= 0.
+ * Do not write PENDING QTY onto docket items (not in MS/R/006A headers).
  */
 const syncDocketOrderPending = async (docketProcess, items, rowDataId) => {
   const orderProcess = await Process.findOne({ processId: "MS/R/006" });
@@ -70,7 +71,6 @@ const syncDocketOrderPending = async (docketProcess, items, rowDataId) => {
   );
   const pendingQty = orderQty - totalDeliveryQty;
 
-  setOrPushItem(items, "PENDING QTY", String(pendingQty));
   setOrPushItem(orderRow.items, "PENDING QTY", String(pendingQty));
 
   const customerName = getItemValue(orderRow.items, "CUSTOMER NAME");
