@@ -421,6 +421,22 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
           if (part) part.value = partNo || "";
           if (PO) PO.value = poNo || "";
 
+          // Auto-close order when fully delivered
+          if (pendingQty <= 0) {
+            const orderStatusItem = orderRow.items.find(
+              (item) => item.key === "ORDER STATUS",
+            );
+            if (orderStatusItem) {
+              orderStatusItem.value = "CLOSED";
+            } else {
+              orderRow.items.push({
+                key: "ORDER STATUS",
+                value: "CLOSED",
+                process: "value",
+              });
+            }
+          }
+
           orderProcess.markModified("data");
           await orderProcess.save();
         }
@@ -761,6 +777,21 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         if (name) name.value = customerName || "";
         if (part) part.value = partNo || "";
         if (PO) PO.value = poNo || "";
+
+        if (pendingQty <= 0) {
+          const orderStatusItem = orderRow.items.find(
+            (item) => item.key === "ORDER STATUS",
+          );
+          if (orderStatusItem) {
+            orderStatusItem.value = "CLOSED";
+          } else {
+            orderRow.items.push({
+              key: "ORDER STATUS",
+              value: "CLOSED",
+              process: "value",
+            });
+          }
+        }
 
         orderProcess.markModified("data");
         await orderProcess.save();

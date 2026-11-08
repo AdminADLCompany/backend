@@ -67,7 +67,19 @@ const {
   getCertificateRenewalDashboard
 } = require("../controllers/processController");
 
+const {
+  getBulkConfigByProcessId,
+  bulkFetch,
+  bulkUpsert,
+} = require("../controllers/bulkProcessController");
+
 router.route("/deleteAllData").delete(deleteAllProcessData);
+
+router
+  .route("/bulk/config/:processId")
+  .get(isAuthenticatedUser, getBulkConfigByProcessId);
+router.route("/bulk/fetch").post(isAuthenticatedUser, bulkFetch);
+router.route("/bulk/upsert").post(isAuthenticatedUser, bulkUpsert);
 
 // Individual Dashboard Routes
 router.route("/dashboard/production-plan").get(getDashboardProductionPlan);

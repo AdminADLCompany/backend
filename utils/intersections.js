@@ -743,21 +743,43 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           statusCode: 404,
         };
 
-      const itemCode = orderRow.items.find(
-        (item) => item.key === "PART NO",
+      const itemCodeRaw = orderRow.items.find(
+        (item) => item.key === "PART NO" || item.key === "PART-NO",
       )?.value;
+      const itemCode = String(itemCodeRaw ?? "").trim();
+      const itemCodeUpper = itemCode.toUpperCase();
 
-      const itemListRow = itemListProcess.data.find(
-        (row) =>
-          row.items.find((item) => item.key === "ITEM CODE")?.value ===
-          itemCode,
-      );
-      if (!itemListRow)
+      if (!itemCode) {
         return {
           success: false,
-          message: "No item list row found",
+          message: "Order PART NO is empty — cannot match stores Item List",
+          statusCode: 400,
+        };
+      }
+
+      // Prefer exact ITEM CODE match; fall back to trim + case-insensitive
+      let itemListRow = itemListProcess.data.find((row) => {
+        const code = row.items.find(
+          (item) => item.key === "ITEM CODE" || item.key === "ITEM-CODE",
+        )?.value;
+        return String(code ?? "").trim() === itemCode;
+      });
+      if (!itemListRow) {
+        itemListRow = itemListProcess.data.find((row) => {
+          const code = row.items.find(
+            (item) => item.key === "ITEM CODE" || item.key === "ITEM-CODE",
+          )?.value;
+          return String(code ?? "").trim().toUpperCase() === itemCodeUpper;
+        });
+      }
+
+      if (!itemListRow) {
+        return {
+          success: false,
+          message: `Item "${itemCode}" is not there in the stores (Item List)`,
           statusCode: 404,
         };
+      }
 
       const itemName = itemListRow.items.find(
         (i) => i.key === "ITEM NAME",
@@ -766,7 +788,6 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         (i) => i.key === "ITEM CATEGORY",
       )?.value;
       const date = items.find((i) => i.key === "DELIVERY DATE")?.value;
-      // const dcNo = items.find((i) => i.key === "DC NO")?.value;
 
       const storeRegisterRow = {
         items: [
@@ -785,10 +806,16 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       storeRegisterProcess.data.push(storeRegisterRow);
       storeRegisterProcess.updatedBy = userId;
 
-      // Update Stock (OUT)
-      let stockRow = stockDataProcess.data.find(
-        (r) => r.items.find((i) => i.key === "ITEM CODE")?.value === itemCode,
-      );
+      let stockRow = stockDataProcess.data.find((r) => {
+        const code = r.items.find((i) => i.key === "ITEM CODE")?.value;
+        return String(code ?? "").trim() === itemCode;
+      });
+      if (!stockRow) {
+        stockRow = stockDataProcess.data.find((r) => {
+          const code = r.items.find((i) => i.key === "ITEM CODE")?.value;
+          return String(code ?? "").trim().toUpperCase() === itemCodeUpper;
+        });
+      }
 
       if (stockRow) {
         const inItem = stockRow.items.find((i) => i.key === "IN");

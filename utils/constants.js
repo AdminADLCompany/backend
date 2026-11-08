@@ -30,15 +30,18 @@ const sceduledLoss = [
   },
 ];
 
-module.exports = {
-  sceduledLoss,
-};
-
-
-const singleEntryHeaders = [
-  {
+/**
+ * Bulk entry configs keyed by target processId (where the Bulk Insert button shows).
+ * - blankMultiCreate: single-entry form + add-row multi table (Quotation)
+ * - parentFetchCreate: fetch parent rows, select, create child rows (Dockets)
+ */
+const bulkEntryConfigs = {
+  "MS/R/005": {
+    mode: "blankMultiCreate",
     processId: "MS/R/005",
-    headers: [
+    sourceProcessId: "MS/R/005",
+    filterHeaders: ["ENQUIRY NO"],
+    singleEntryHeaders: [
       "ENQUIRY NO",
       "DATE",
       "ENQ BY",
@@ -47,53 +50,35 @@ const singleEntryHeaders = [
       "QUOTATION DATE",
       "QUOTATION NO",
       "QL STATUS",
-      "PO NO"
-    ]
-  },
-  {
-    processId: "MS/R/006A",
-    headers: [
-      "CUSTOMER NAME",
       "PO NO",
-      "PART NO",
+    ],
+  },
+  "MS/R/006A": {
+    mode: "parentFetchCreate",
+    processId: "MS/R/006A",
+    sourceProcessId: "MS/R/006",
+    filterHeaders: ["ORDER STATUS"],
+    defaultFilters: { "ORDER STATUS": "OPEN" },
+    singleEntryHeaders: [
       "INVOICE NO",
       "DELIVERY DATE",
       "CREDIT PERIOD",
       "GRN",
-      "PAYMENT"
-    ]
-  }
-]
-
-const multipleEntryHeaders = [
-  {
-    processId: "MS/R/005",
-    headers: [
-      "PART NO",
-      "PART NAME"
-    ]
-  },
-  {
-    processId: "MS/R/006A",
-    headers: [
-      "DELIVERY QTY",
-      "VALUE",
+      "PAYMENT",
     ],
-  }
-]
-
-const getFilterForBulkEntry = [
-  {
-    processId: "MS/R/005",
-    filterHeaders: [
-      "STATUS"
-    ]
+    parentDisplayHeaders: [
+      "CUSTOMER NAME",
+      "PO NO",
+      "PART NO",
+      "QTY",
+      "PENDING QTY",
+      "LOCATION",
+    ],
+    multipleEntryHeaders: ["DELIVERY QTY", "VALUE"],
   },
-  {
-    processId: "MS/R/006A",
-    fromProcessId: "MS/R/006",
-    filterHeaders: [
-      "ORDER STATUS"
-    ]
-  }
-]
+};
+
+module.exports = {
+  sceduledLoss,
+  bulkEntryConfigs,
+};
