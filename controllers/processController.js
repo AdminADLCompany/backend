@@ -146,6 +146,85 @@ exports.addHeader = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+exports.insertHeaders = catchAsyncErrors(async (req, res, next) => {
+  const process = await Process.findById(req.params.id);
+  if (!process) {
+    return next(new ErrorHandler("Process not found", 404));
+  }
+
+  let { headers: inserts } = req.body;
+  if (typeof inserts === "string") {
+    try {
+      inserts = JSON.parse(inserts);
+    } catch {
+      return next(new ErrorHandler("Invalid headers payload", 400));
+    }
+  }
+
+  if (!Array.isArray(inserts) || inserts.length === 0) {
+    return next(
+      new ErrorHandler("headers must be a non-empty array of { headerName, index }", 400),
+    );
+  }
+
+  const normalized = inserts.map((entry) => {
+    const headerName =
+      entry?.headerName ?? entry?.name ?? entry?.header ?? null;
+    const index = Number(entry?.index);
+    return { headerName, index };
+  });
+
+  for (const entry of normalized) {
+    if (!entry.headerName || typeof entry.headerName !== "string") {
+      return next(new ErrorHandler("Each entry requires headerName", 400));
+    }
+    if (!Number.isInteger(entry.index) || entry.index < 0) {
+      return next(
+        new ErrorHandler(`Invalid index for header "${entry.headerName}"`, 400),
+      );
+    }
+  }
+
+  const existingNames = new Set(
+    (process.headers || []).map((h) => String(h).trim().toUpperCase()),
+  );
+  for (const { headerName } of normalized) {
+    if (existingNames.has(headerName.trim().toUpperCase())) {
+      return next(
+        new ErrorHandler(`Header "${headerName}" already exists`, 400),
+      );
+    }
+  }
+
+  // Ascending index so consecutive inserts (1→2→3) land correctly after each splice
+  const sorted = [...normalized].sort((a, b) => a.index - b.index);
+
+  for (const { headerName, index } of sorted) {
+    const clampIndex = Math.min(Math.max(index, 0), process.headers.length);
+    process.headers.splice(clampIndex, 0, headerName);
+
+    for (const row of process.data || []) {
+      if (!Array.isArray(row.items)) row.items = [];
+      const itemIndex = Math.min(clampIndex, row.items.length);
+      row.items.splice(itemIndex, 0, {
+        key: headerName,
+        value: "",
+        process: "",
+      });
+    }
+  }
+
+  process.markModified("headers");
+  process.markModified("data");
+  process.updatedBy = req.user._id;
+  await process.save();
+
+  res.status(200).json({
+    success: true,
+    data: process,
+  });
+});
+
 exports.deleteHeader = catchAsyncErrors(async (req, res, next) => {
   const process = await Process.findById(req.params.id);
   const { headerName } = req.body;

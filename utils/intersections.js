@@ -56,10 +56,78 @@ const linkProcessIdItems = async (rowItems) => {
   return rowItems;
 };
 
+const parseEpochOrDate = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && !isNaN(value)) return value;
+  const str = String(value).trim();
+  if (/^\d+$/.test(str)) {
+    const num = Number(str);
+    return isNaN(num) ? null : num;
+  }
+  const parsed = new Date(str).getTime();
+  return isNaN(parsed) ? null : parsed;
+};
+
+/** Normalize + validate Shift Schedule WEEK / FROM / TO. Mutates items in place. */
+const handleShiftScheduleItems = (items) => {
+  const weekItem = items.find((i) => i.key === "WEEK");
+  const fromItem = items.find((i) => i.key === "FROM");
+  const toItem = items.find((i) => i.key === "TO");
+
+  if (weekItem) weekItem.process = "value";
+  if (fromItem) fromItem.process = "date";
+  if (toItem) toItem.process = "date";
+
+  if (!fromItem && !toItem) return { success: true };
+
+  let fromEpoch = null;
+  let toEpoch = null;
+
+  if (fromItem && fromItem.value !== "" && fromItem.value != null) {
+    fromEpoch = parseEpochOrDate(fromItem.value);
+    if (fromEpoch == null) {
+      return {
+        success: false,
+        message: "Invalid FROM date",
+        statusCode: 400,
+      };
+    }
+    fromItem.value = String(fromEpoch);
+  }
+
+  if (toItem && toItem.value !== "" && toItem.value != null) {
+    toEpoch = parseEpochOrDate(toItem.value);
+    if (toEpoch == null) {
+      return {
+        success: false,
+        message: "Invalid TO date",
+        statusCode: 400,
+      };
+    }
+    toItem.value = String(toEpoch);
+  }
+
+  if (fromEpoch != null && toEpoch != null && fromEpoch > toEpoch) {
+    return {
+      success: false,
+      message: "FROM date must be less than or equal to TO date",
+      statusCode: 400,
+    };
+  }
+
+  return { success: true };
+};
+
 exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
   try {
     if (!Array.isArray(items))
       return { success: false, message: "Items must be an array" };
+
+    // ---- MR/R/007 (Shift Schedule) — validate WEEK/FROM/TO; no linking ----
+    if (process.processId === "MR/R/007") {
+      return handleShiftScheduleItems(items);
+    }
+
     // ---- MR/R/003B (Action Taken -> Rework) ----
     if (process.processId === "MR/R/003B") {
       const moveToItem = items.find((i) => i.key === "MOVE TO");
@@ -958,7 +1026,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           statusCode: 404,
         };
 
-      if (isMoving === "ORDER_HOLDED") {
+      if (isMoving === "ORDER_HOLDED") {  
         let orderListRow = {
           items: [
             {
@@ -1380,6 +1448,12 @@ exports.handleUpdateIntersection = async (
   try {
     if (!Array.isArray(items))
       return { success: false, message: "Items must be an array" };
+
+    // ---- MR/R/007 (Shift Schedule) — validate WEEK/FROM/TO; no linking ----
+    if (process.processId === "MR/R/007") {
+      return handleShiftScheduleItems(items);
+    }
+
     // ---- MR/R/003B (Rework) ----
     if (process.processId === "MR/R/003B") {
       const moveToItem = items.find((i) => i.key === "MOVE TO");

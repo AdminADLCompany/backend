@@ -12,6 +12,7 @@ const {
   updateProcess,
   deleteProcess,
   addHeader,
+  insertHeaders,
   deleteHeader,
   addData,
   updateData,
@@ -127,6 +128,9 @@ router
   .get(isAuthenticatedUser, getProcessById)
   .put(isAuthenticatedUser, updateProcess)
   .delete(isAuthenticatedUser, deleteProcess);
+router
+  .route("/headers/:id/insert")
+  .post(isAuthenticatedUser, insertHeaders);
 router
   .route("/headers/:id")
   .post(isAuthenticatedUser, addHeader)

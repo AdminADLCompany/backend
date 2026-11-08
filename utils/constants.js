@@ -33,3 +33,67 @@ const sceduledLoss = [
 module.exports = {
   sceduledLoss,
 };
+
+
+const singleEntryHeaders = [
+  {
+    processId: "MS/R/005",
+    headers: [
+      "ENQUIRY NO",
+      "DATE",
+      "ENQ BY",
+      "CUSTOMER-NAME",
+      "LOCATION",
+      "QUOTATION DATE",
+      "QUOTATION NO",
+      "QL STATUS",
+      "PO NO"
+    ]
+  },
+  {
+    processId: "MS/R/006A",
+    headers: [
+      "CUSTOMER NAME",
+      "PO NO",
+      "PART NO",
+      "INVOICE NO",
+      "DELIVERY DATE",
+      "CREDIT PERIOD",
+      "GRN",
+      "PAYMENT"
+    ]
+  }
+]
+
+const multipleEntryHeaders = [
+  {
+    processId: "MS/R/005",
+    headers: [
+      "PART NO",
+      "PART NAME"
+    ]
+  },
+  {
+    processId: "MS/R/006A",
+    headers: [
+      "DELIVERY QTY",
+      "VALUE",
+    ],
+  }
+]
+
+const getFilterForBulkEntry = [
+  {
+    processId: "MS/R/005",
+    filterHeaders: [
+      "STATUS"
+    ]
+  },
+  {
+    processId: "MS/R/006A",
+    fromProcessId: "MS/R/006",
+    filterHeaders: [
+      "ORDER STATUS"
+    ]
+  }
+]
