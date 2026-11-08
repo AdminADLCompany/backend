@@ -140,6 +140,28 @@ const createProcessRow = async (processId, items, rowDataId, userId) => {
   } else if (process.processId === "MS/R/006A") {
     const sync = await syncDocketOrderPending(process, items, rid);
     closed = !!sync.closed;
+  } else if (process.processId === "PR/R/003A") {
+    // Copy identity fields from parent Procurement Register row
+    const procurementProcess = await Process.findOne({ processId: "PR/R/003" });
+    const matchedRow = procurementProcess?.data?.find(
+      (itemRow) => itemRow._id.toString() === rid.toString(),
+    );
+    if (matchedRow) {
+      const vendorName = matchedRow.items.find(
+        (item) => item.key === "VENDOR-NAME",
+      )?.value;
+      const itemName = matchedRow.items.find(
+        (item) => item.key === "ITEM NAME",
+      )?.value;
+      const poNo = matchedRow.items.find((item) => item.key === "PO NO")?.value;
+
+      const name = items.find((i) => i.key === "VENDOR NAME");
+      const part = items.find((i) => i.key === "ITEM NAME");
+      const PO = items.find((i) => i.key === "PO NO");
+      if (name) name.value = vendorName || "";
+      if (part) part.value = itemName || "";
+      if (PO) PO.value = poNo || "";
+    }
   }
 
   const newRow = {

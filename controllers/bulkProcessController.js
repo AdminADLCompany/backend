@@ -16,7 +16,11 @@ exports.getBulkConfigByProcessId = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Bulk entry not configured for this process", 404));
   }
 
-  const target = await Process.findOne({ processId }).select("headers process processId");
+  // Load create-target process (config.processId) so Incoming page gets QI headers
+  const createProcessId = config.processId || processId;
+  const target = await Process.findOne({ processId: createProcessId }).select(
+    "headers process processId",
+  );
   if (!target) {
     return next(new ErrorHandler("Process not found", 404));
   }
@@ -33,6 +37,7 @@ exports.getBulkConfigByProcessId = catchAsyncErrors(async (req, res, next) => {
       headers: target.headers || [],
       processName: target.process,
       multiEntryHeaders,
+      instructions: config.instructions || "",
     },
   });
 });
@@ -49,15 +54,34 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("No source process configured for fetch", 400));
   }
 
-  // Quotation self-edit: require ENQUIRY NO (or any filterHeaders) to be provided
-  if (config.mode === "blankMultiCreate") {
-    const requiredFilters = config.filterHeaders || [];
-    for (const key of requiredFilters) {
-      const val = filters?.[key];
-      if (val === undefined || val === null || String(val).trim() === "") {
+  // Fetch filter validation (blankMultiCreate + optional-filter parentFetchCreate)
+  if ((config.filterHeaders || []).length) {
+    if (config.filtersOptional) {
+      // PR/R/003 / PR/R/003A: any subset; require at least one filled
+      const hasAny = (config.filterHeaders || []).some((key) => {
+        const val = filters?.[key];
+        return val !== undefined && val !== null && String(val).trim() !== "";
+      });
+      if (!hasAny) {
         return next(
-          new ErrorHandler(`Filter "${key}" is required to fetch records for edit`, 400),
+          new ErrorHandler(
+            `Enter at least one filter (${(config.filterHeaders || []).join(", ")})`,
+            400,
+          ),
         );
+      }
+    } else if (config.mode === "blankMultiCreate") {
+      // Quotation: all configured filterHeaders required
+      for (const key of config.filterHeaders || []) {
+        const val = filters?.[key];
+        if (val === undefined || val === null || String(val).trim() === "") {
+          return next(
+            new ErrorHandler(
+              `Filter "${key}" is required to fetch records for edit`,
+              400,
+            ),
+          );
+        }
       }
     }
   }
@@ -106,7 +130,26 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     return true;
   };
 
-  const matched = (source.data || []).filter(matchFilters);
+  const excludeByParentValues = (row) => {
+    const excludes = config.excludeParentValues || {};
+    for (const [key, banned] of Object.entries(excludes)) {
+      const item = (row.items || []).find((i) => i.key === key);
+      const val = String(item?.value ?? "").trim().toUpperCase();
+      const list = Array.isArray(banned) ? banned : [banned];
+      if (
+        list.some(
+          (b) => String(b ?? "").trim().toUpperCase() === val,
+        )
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const matched = (source.data || [])
+    .filter(matchFilters)
+    .filter(excludeByParentValues);
   const total = matched.length;
   const pageRows = matched.slice(skip, skip + pageLimit);
 
@@ -161,7 +204,9 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("rows must be a non-empty array", 400));
   }
 
-  const target = await Process.findOne({ processId });
+  // Create-target process (may differ from page processId, e.g. Incoming → QI)
+  const createProcessId = config.processId || processId;
+  const target = await Process.findOne({ processId: createProcessId });
   if (!target) {
     return next(new ErrorHandler("Process not found", 404));
   }
@@ -185,10 +230,10 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
         const items = buildOrderedItems(headers, valueMap);
 
         if (row.rowId) {
-          await updateProcessRow(processId, row.rowId, items, userId);
+          await updateProcessRow(createProcessId, row.rowId, items, userId);
           updated += 1;
         } else {
-          await createProcessRow(processId, items, null, userId);
+          await createProcessRow(createProcessId, items, null, userId);
           created += 1;
         }
       } catch (err) {
@@ -204,57 +249,175 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
       try {
         const sourceRowId = row.sourceRowId || row.rowId;
         if (!sourceRowId) {
-          throw new Error("sourceRowId (parent order id) is required");
+          throw new Error("sourceRowId (parent row id) is required");
         }
 
-        const deliveryQty = Number(row.items?.["DELIVERY QTY"] ?? 0);
-        if (!(deliveryQty > 0)) {
-          throw new Error("DELIVERY QTY must be greater than 0");
-        }
+        if (createProcessId === "MS/R/006A") {
+          const deliveryQty = Number(row.items?.["DELIVERY QTY"] ?? 0);
+          if (!(deliveryQty > 0)) {
+            throw new Error("DELIVERY QTY must be greater than 0");
+          }
 
-        const orderProcess = await Process.findOne({ processId: "MS/R/006" });
-        const orderRow = orderProcess?.data?.id?.(sourceRowId) ||
-          orderProcess?.data?.find(
-            (r) => r._id.toString() === sourceRowId.toString(),
+          const orderProcess = await Process.findOne({ processId: "MS/R/006" });
+          const orderRow =
+            orderProcess?.data?.id?.(sourceRowId) ||
+            orderProcess?.data?.find(
+              (r) => r._id.toString() === sourceRowId.toString(),
+            );
+          if (!orderRow) {
+            throw new Error("Parent order row not found");
+          }
+
+          const pendingQty = Number(
+            orderRow.items.find((it) => it.key === "PENDING QTY")?.value ??
+              orderRow.items.find((it) => it.key === "QTY")?.value ??
+              0,
           );
-        if (!orderRow) {
-          throw new Error("Parent order row not found");
-        }
+          if (deliveryQty > pendingQty) {
+            throw new Error(
+              `DELIVERY QTY (${deliveryQty}) exceeds PENDING QTY (${pendingQty})`,
+            );
+          }
 
-        const pendingQty = Number(
-          orderRow.items.find((it) => it.key === "PENDING QTY")?.value ??
-            orderRow.items.find((it) => it.key === "QTY")?.value ??
-            0,
-        );
-        if (deliveryQty > pendingQty) {
+          const parentMap = itemsToMap(orderRow.items);
+          const valueMap = {
+            ...parentMap,
+            ...singleEntry,
+            ...(row.items || {}),
+            "CUSTOMER NAME": parentMap["CUSTOMER NAME"] || "",
+            "PART NO": parentMap["PART NO"] || "",
+            "PO NO": parentMap["PO NO"] || "",
+          };
+
+          const items = buildOrderedItems(headers, valueMap);
+          const result = await createProcessRow(
+            createProcessId,
+            items,
+            sourceRowId,
+            userId,
+          );
+          created += 1;
+          if (result.closed) closedOrders += 1;
+        } else if (createProcessId === "PR/R/003A") {
+          const qty = Number(row.items?.["QTY"] ?? 0);
+          if (!(qty > 0)) {
+            throw new Error("QTY must be greater than 0");
+          }
+
+          const procurementProcess = await Process.findOne({
+            processId: "PR/R/003",
+          });
+          const parentRow =
+            procurementProcess?.data?.id?.(sourceRowId) ||
+            procurementProcess?.data?.find(
+              (r) => r._id.toString() === sourceRowId.toString(),
+            );
+          if (!parentRow) {
+            throw new Error("Parent procurement row not found");
+          }
+
+          const parentMap = itemsToMap(parentRow.items);
+          const pendingQty = Number(
+            parentMap["PENDING QTY"] ?? parentMap["QTY"] ?? 0,
+          );
+          if (pendingQty > 0 && qty > pendingQty) {
+            throw new Error(
+              `QTY (${qty}) exceeds PENDING QTY (${pendingQty})`,
+            );
+          }
+
+          const valueMap = {
+            ...singleEntry,
+            ...(row.items || {}),
+            "ITEM NAME":
+              singleEntry["ITEM NAME"] || parentMap["ITEM NAME"] || "",
+            "VENDOR NAME":
+              singleEntry["VENDOR NAME"] ||
+              parentMap["VENDOR-NAME"] ||
+              parentMap["VENDOR NAME"] ||
+              "",
+            "PO NO":
+              singleEntry["PO NO"] || parentMap["PO NO"] || "",
+          };
+
+          const items = buildOrderedItems(headers, valueMap);
+          await createProcessRow(createProcessId, items, sourceRowId, userId);
+          created += 1;
+        } else if (createProcessId === "QA/R/003A") {
+          const incomingProcess = await Process.findOne({
+            processId: "QA/R/003",
+          });
+          const parentRow =
+            incomingProcess?.data?.id?.(sourceRowId) ||
+            incomingProcess?.data?.find(
+              (r) => r._id.toString() === sourceRowId.toString(),
+            );
+          if (!parentRow) {
+            throw new Error("Parent Incoming Inspection row not found");
+          }
+
+          const parentMap = itemsToMap(parentRow.items);
+          const status = String(
+            parentMap["INSPECTION-STATUS"] ?? "",
+          ).trim();
+          if (status.toUpperCase() === "DONE") {
+            throw new Error(
+              "Incoming Inspection row is already Done; skip or refresh Fetch",
+            );
+          }
+
+          const valueMap = {
+            ...singleEntry,
+            ...(row.items || {}),
+          };
+          const items = buildOrderedItems(headers, valueMap);
+          // Store as string so Done intersection can match rowDataId === parent._id.toString()
+          const parentIdStr = sourceRowId.toString();
+          await createProcessRow(createProcessId, items, parentIdStr, userId);
+          created += 1;
+
+          if (config.markParentDone) {
+            try {
+              const updatedItems = (parentRow.items || []).map((it) => {
+                const plain = it.toObject?.() || { ...it };
+                if (plain.key === "INSPECTION-STATUS") {
+                  return { ...plain, value: "Done" };
+                }
+                return plain;
+              });
+              const hasStatus = updatedItems.some(
+                (it) => it.key === "INSPECTION-STATUS",
+              );
+              if (!hasStatus) {
+                updatedItems.push({
+                  key: "INSPECTION-STATUS",
+                  value: "Done",
+                  process: "select",
+                });
+              }
+              await updateProcessRow(
+                "QA/R/003",
+                parentIdStr,
+                updatedItems,
+                userId,
+              );
+            } catch (markErr) {
+              throw new Error(
+                `Quality Inspection created, but failed to mark Incoming Done: ${
+                  markErr.message || "unknown error"
+                }`,
+              );
+            }
+          }
+        } else {
           throw new Error(
-            `DELIVERY QTY (${deliveryQty}) exceeds PENDING QTY (${pendingQty})`,
+            `Unsupported parentFetchCreate process: ${createProcessId}`,
           );
         }
-
-        const parentMap = itemsToMap(orderRow.items);
-        const valueMap = {
-          ...parentMap,
-          ...singleEntry,
-          ...(row.items || {}),
-          "CUSTOMER NAME": parentMap["CUSTOMER NAME"] || "",
-          "PART NO": parentMap["PART NO"] || "",
-          "PO NO": parentMap["PO NO"] || "",
-        };
-
-        const items = buildOrderedItems(headers, valueMap);
-        const result = await createProcessRow(
-          processId,
-          items,
-          sourceRowId,
-          userId,
-        );
-        created += 1;
-        if (result.closed) closedOrders += 1;
       } catch (err) {
         failed.push({
           index: i,
-          message: err.message || "Failed to create docket",
+          message: err.message || "Failed to create child row",
         });
       }
     }
