@@ -6,6 +6,8 @@ const prefixForType = (type) => {
   switch (String(type || "").trim().toUpperCase()) {
     case "ENQUIRE_NUMBER":
       return "EQN";
+    case "PO_NO":
+      return "PO";
     default: {
       const err = new Error(`Unknown serial type: ${type}`);
       err.statusCode = 400;

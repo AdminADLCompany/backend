@@ -32,6 +32,11 @@ const SERIAL_SEEDS = [
     padLength: DEFAULT_PAD_LENGTH,
     description: "Quotation Enquiry Number",
   },
+  {
+    type: "PO_NO",
+    padLength: DEFAULT_PAD_LENGTH,
+    description: "Procurement Register PO Number",
+  },
 ];
 
 /**

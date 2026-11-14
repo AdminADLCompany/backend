@@ -86,8 +86,14 @@ const bulkEntryConfigs = {
     processId: "PR/R/003",
     sourceProcessId: "PR/R/003",
     filtersOptional: true,
-    filterHeaders: ["ITEM CATEGORY", "ITEM NAME", "GRADE", "TYPE"],
-    singleEntryHeaders: ["VENDOR-NAME", "PO NO"],
+    filterHeaders: [
+      "ITEM CATEGORY",
+      "ITEM NAME",
+      "GRADE",
+      "TYPE",
+      "VENDOR-NAME",
+    ],
+    singleEntryHeaders: ["VENDOR-NAME", "PO NO", "LEAD TIME", "PR STATUS"],
   },
   "PR/R/003A": {
     mode: "parentFetchCreate",
