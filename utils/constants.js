@@ -40,7 +40,8 @@ const bulkEntryConfigs = {
     mode: "blankMultiCreate",
     processId: "MS/R/005",
     sourceProcessId: "MS/R/005",
-    filterHeaders: ["ENQUIRY NO"],
+    filtersOptional: true,
+    filterHeaders: ["ENQUIRY NO", "QL STATUS"],
     singleEntryHeaders: [
       "ENQUIRY NO",
       "DATE",
@@ -51,6 +52,8 @@ const bulkEntryConfigs = {
       "QUOTATION NO",
       "QL STATUS",
       "PO NO",
+      "ORDER DATE",
+      "LEAD TIME",
     ],
   },
   "MS/R/006A": {

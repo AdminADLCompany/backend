@@ -16,9 +16,23 @@ require("dotenv").config({
 });
 
 const Process = require("../models/process");
+const SerialNumber = require("../models/serialNumber");
+const {
+  prefixForType,
+  DEFAULT_PAD_LENGTH,
+} = require("../utils/serialNumber");
 
 const ALLOW_REMOTE = process.argv.includes("--allow-remote");
 const dbUri = process.env.DB_LOCAL_URI;
+
+/** Seed / ensure serial sequence docs (idempotent). */
+const SERIAL_SEEDS = [
+  {
+    type: "ENQUIRE_NUMBER",
+    padLength: DEFAULT_PAD_LENGTH,
+    description: "Quotation Enquiry Number",
+  },
+];
 
 /**
  * Declarative header migrations.
@@ -164,6 +178,28 @@ async function main() {
   console.log(
     `\nDone. Applied ${totalApplied} header(s), skipped ${totalSkipped}.`,
   );
+
+  console.log("\n→ SerialNumber seeds");
+  for (const seed of SERIAL_SEEDS) {
+    const type = String(seed.type).trim().toUpperCase();
+    const prefix = prefixForType(type);
+    const existing = await SerialNumber.findOne({ type });
+    if (existing) {
+      console.log(
+        `  skipped (exists): ${type} lastNumber=${existing.lastNumber} prefix=${existing.prefix}`,
+      );
+      continue;
+    }
+    await SerialNumber.create({
+      type,
+      prefix,
+      lastNumber: 0,
+      padLength: seed.padLength || DEFAULT_PAD_LENGTH,
+      description: seed.description || "",
+    });
+    console.log(`  created: ${type} prefix=${prefix} padLength=${seed.padLength || DEFAULT_PAD_LENGTH}`);
+  }
+
   await mongoose.disconnect();
 }
 

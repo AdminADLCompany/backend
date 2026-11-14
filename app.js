@@ -61,6 +61,7 @@ const processRoutes = require("./routes/process");
 const history = require("./routes/history");
 const category = require("./routes/category");
 const subCategory = require("./routes/subCategory");
+const serialNumber = require("./routes/serialNumber");
 
 // Using routes
 app.use("/api/v1/user", user);
@@ -70,6 +71,7 @@ app.use("/api/v1/process", processRoutes);
 app.use("/api/v1/history", history);
 app.use("/api/v1/category", category);
 app.use("/api/v1/subcategory", subCategory);
+app.use("/api/v1/serial", serialNumber);
 
 app.get("/", (req, res) => {
   res.send("Hello World!");

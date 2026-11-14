@@ -1086,9 +1086,11 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   let groupOfCustomerList = [];
   customerListProcess.data.forEach((row) => {
     const cName = row.items.find((i) => i.key === "CUSTOMER NAME")?.value;
+    const cLocation = row.items.find((i) => i.key === "LOCATION")?.value;
     groupOfCustomerList.push([
       {
         "CUSTOMER-NAME": cName,
+        LOCATION: cLocation || "",
       },
     ]);
     if (cName) customerName.add(cName);
@@ -1128,6 +1130,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "VENDOR-NAME", value: Array.from(vendorName) },
     { key: "GRADE", value: Array.from(itemGrade) },
     { key: "CUSTOMER-NAME", value: Array.from(customerName) },
+    { key: "ENQ BY", value: Array.from(employeeName) },
     { key: "ITEM_CODE", value: Array.from(itemCode) },
     { key: "PLAN-NO", value: Array.from(planNumber) },
     { key: "GENERAL SHIFT", value: Array.from(employeeName) },
