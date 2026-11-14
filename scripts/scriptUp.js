@@ -56,6 +56,17 @@ const HEADER_UPDATES = [
       { headerName: "ENQUIRY NO", index: 1, processType: "value" },
     ],
   },
+  {
+    processId: "MS/R/006A",
+    description: "Dockets — PART NAME after PART NO",
+    headers: [
+      {
+        headerName: "PART NAME",
+        afterHeader: "PART NO",
+        processType: "value",
+      },
+    ],
+  },
 ];
 
 function isLocalUri(uri) {
@@ -79,9 +90,20 @@ function insertHeadersOnProcess(process, inserts) {
       skipped.push(name);
       continue;
     }
+    let index = Number(entry.index);
+    if (
+      (!Number.isInteger(index) || index < 0) &&
+      entry.afterHeader
+    ) {
+      const after = String(entry.afterHeader).trim().toUpperCase();
+      const afterIdx = (process.headers || []).findIndex(
+        (h) => String(h).trim().toUpperCase() === after,
+      );
+      index = afterIdx >= 0 ? afterIdx + 1 : (process.headers || []).length;
+    }
     toApply.push({
       headerName: name,
-      index: Number(entry.index),
+      index,
       processType: entry.processType || "",
     });
   }

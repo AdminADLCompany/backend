@@ -406,16 +406,21 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
           const partNo = orderRow.items.find(
             (item) => item.key === "PART NO",
           )?.value;
+          const partName = orderRow.items.find(
+            (item) => item.key === "PART NAME",
+          )?.value;
           const poNo = orderRow.items.find(
             (item) => item.key === "PO NO",
           )?.value;
 
           const name = items.find((i) => i.key === "CUSTOMER NAME");
           const part = items.find((i) => i.key === "PART NO");
+          const partNameItem = items.find((i) => i.key === "PART NAME");
           const PO = items.find((i) => i.key === "PO NO");
 
           if (name) name.value = customerName || "";
           if (part) part.value = partNo || "";
+          if (partNameItem) partNameItem.value = partName || "";
           if (PO) PO.value = poNo || "";
 
           // Auto-close order when fully delivered
@@ -762,14 +767,19 @@ exports.updateData = catchAsyncErrors(async (req, res, next) => {
         const partNo = orderRow.items.find(
           (item) => item.key === "PART NO",
         )?.value;
+        const partName = orderRow.items.find(
+          (item) => item.key === "PART NAME",
+        )?.value;
         const poNo = orderRow.items.find((item) => item.key === "PO NO")?.value;
 
         const name = items.find((i) => i.key === "CUSTOMER NAME");
         const part = items.find((i) => i.key === "PART NO");
+        const partNameItem = items.find((i) => i.key === "PART NAME");
         const PO = items.find((i) => i.key === "PO NO");
 
         if (name) name.value = customerName || "";
         if (part) part.value = partNo || "";
+        if (partNameItem) partNameItem.value = partName || "";
         if (PO) PO.value = poNo || "";
 
         if (pendingQty <= 0) {

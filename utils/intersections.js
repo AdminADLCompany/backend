@@ -773,12 +773,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         });
       }
 
+      // Soft miss: allow docket save without Item List / store-stock side effects
       if (!itemListRow) {
-        return {
-          success: false,
-          message: `Item "${itemCode}" is not there in the stores (Item List)`,
-          statusCode: 404,
-        };
+        return { success: true };
       }
 
       const itemName = itemListRow.items.find(

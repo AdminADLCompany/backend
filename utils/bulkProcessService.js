@@ -75,13 +75,16 @@ const syncDocketOrderPending = async (docketProcess, items, rowDataId) => {
 
   const customerName = getItemValue(orderRow.items, "CUSTOMER NAME");
   const partNo = getItemValue(orderRow.items, "PART NO");
+  const partName = getItemValue(orderRow.items, "PART NAME");
   const poNo = getItemValue(orderRow.items, "PO NO");
 
   const name = items.find((i) => i.key === "CUSTOMER NAME");
   const part = items.find((i) => i.key === "PART NO");
+  const partNameItem = items.find((i) => i.key === "PART NAME");
   const PO = items.find((i) => i.key === "PO NO");
   if (name) name.value = customerName || "";
   if (part) part.value = partNo || "";
+  if (partNameItem) partNameItem.value = partName || "";
   if (PO) PO.value = poNo || "";
 
   let closed = false;

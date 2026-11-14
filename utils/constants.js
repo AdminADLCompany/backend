@@ -60,7 +60,8 @@ const bulkEntryConfigs = {
     mode: "parentFetchCreate",
     processId: "MS/R/006A",
     sourceProcessId: "MS/R/006",
-    filterHeaders: ["ORDER STATUS"],
+    filtersOptional: true,
+    filterHeaders: ["ORDER STATUS", "INVOICE NO"],
     defaultFilters: { "ORDER STATUS": "OPEN" },
     singleEntryHeaders: [
       "INVOICE NO",
@@ -73,6 +74,7 @@ const bulkEntryConfigs = {
       "CUSTOMER NAME",
       "PO NO",
       "PART NO",
+      "PART NAME",
       "QTY",
       "PENDING QTY",
       "LOCATION",

@@ -115,8 +115,23 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
   ];
   const keySet = new Set(displayKeys);
 
+  // Dockets: INVOICE NO is not on Order List — apply via docket join, not row match
+  const invoiceFilterRaw =
+    processId === "MS/R/006A" ? appliedFilters["INVOICE NO"] : undefined;
+  const invoiceFilter =
+    invoiceFilterRaw !== undefined &&
+    invoiceFilterRaw !== null &&
+    String(invoiceFilterRaw).trim() !== ""
+      ? String(invoiceFilterRaw).trim()
+      : "";
+
+  const orderListFilters = { ...appliedFilters };
+  if (processId === "MS/R/006A") {
+    delete orderListFilters["INVOICE NO"];
+  }
+
   const matchFilters = (row) => {
-    for (const [key, expected] of Object.entries(appliedFilters)) {
+    for (const [key, expected] of Object.entries(orderListFilters)) {
       if (expected === undefined || expected === null || expected === "") continue;
       const item = (row.items || []).find((i) => i.key === key);
       const val = item?.value;
@@ -147,9 +162,44 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     return true;
   };
 
-  const matched = (source.data || [])
+  let invoiceNoOptions = [];
+  let orderIdsForInvoice = null;
+
+  if (processId === "MS/R/006A") {
+    const dockets = await Process.findOne({ processId: "MS/R/006A" }).lean();
+    const invoiceSet = new Set();
+    const orderIdSet = new Set();
+    for (const dRow of dockets?.data || []) {
+      const inv = String(
+        (dRow.items || []).find((i) => i.key === "INVOICE NO")?.value ?? "",
+      ).trim();
+      if (inv) invoiceSet.add(inv);
+      if (
+        invoiceFilter &&
+        inv.toUpperCase() === invoiceFilter.toUpperCase() &&
+        dRow.rowDataId
+      ) {
+        orderIdSet.add(dRow.rowDataId.toString());
+      }
+    }
+    invoiceNoOptions = Array.from(invoiceSet).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    if (invoiceFilter) {
+      orderIdsForInvoice = orderIdSet;
+    }
+  }
+
+  let matched = (source.data || [])
     .filter(matchFilters)
     .filter(excludeByParentValues);
+
+  if (orderIdsForInvoice) {
+    matched = matched.filter((row) =>
+      orderIdsForInvoice.has(row._id.toString()),
+    );
+  }
+
   const total = matched.length;
   const pageRows = matched.slice(skip, skip + pageLimit);
 
@@ -190,6 +240,7 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     limit: pageLimit,
     rows,
     singleEntryFromFetch,
+    invoiceNoOptions,
   });
 });
 
@@ -286,6 +337,7 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
             ...(row.items || {}),
             "CUSTOMER NAME": parentMap["CUSTOMER NAME"] || "",
             "PART NO": parentMap["PART NO"] || "",
+            "PART NAME": parentMap["PART NAME"] || "",
             "PO NO": parentMap["PO NO"] || "",
           };
 
