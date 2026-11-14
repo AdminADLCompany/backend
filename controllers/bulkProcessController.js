@@ -166,6 +166,7 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
   let orderIdsForInvoice = null;
   let poNoOptions = [];
   let vendorNameOptions = [];
+  let itemCodeOptions = [];
 
   if (processId === "MS/R/006A") {
     const dockets = await Process.findOne({ processId: "MS/R/006A" }).lean();
@@ -226,6 +227,38 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     );
   }
 
+  // Quality Inspection bulk: distinct Incoming Inspection filter options
+  if (config.sourceProcessId === "QA/R/003") {
+    const incoming =
+      sourceProcessId === "QA/R/003"
+        ? source
+        : await Process.findOne({ processId: "QA/R/003" }).lean();
+    const vendorSet = new Set();
+    const invoiceSet = new Set();
+    const itemCodeSet = new Set();
+    for (const row of incoming?.data || []) {
+      const map = {};
+      for (const it of row.items || []) {
+        if (it?.key) map[it.key] = it.value;
+      }
+      const vendor = String(map["VENDOR NAME"] ?? "").trim();
+      const inv = String(map["INVOICE NO"] ?? "").trim();
+      const code = String(map["ITEM CODE"] ?? map["I CODE"] ?? "").trim();
+      if (vendor) vendorSet.add(vendor);
+      if (inv) invoiceSet.add(inv);
+      if (code) itemCodeSet.add(code);
+    }
+    vendorNameOptions = Array.from(vendorSet).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    invoiceNoOptions = Array.from(invoiceSet).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    itemCodeOptions = Array.from(itemCodeSet).sort((a, b) =>
+      a.localeCompare(b),
+    );
+  }
+
   let matched = (source.data || [])
     .filter(matchFilters)
     .filter(excludeByParentValues);
@@ -279,6 +312,7 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     invoiceNoOptions,
     poNoOptions,
     vendorNameOptions,
+    itemCodeOptions,
   });
 });
 

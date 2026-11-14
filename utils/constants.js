@@ -122,11 +122,18 @@ const bulkEntryConfigs = {
     processId: "QA/R/003A",
     sourceProcessId: "QA/R/003",
     filtersOptional: true,
-    filterHeaders: ["ITEM CATEGORY", "ITEM NAME", "GRADE"],
+    filterHeaders: [
+      "ITEM CATEGORY",
+      "ITEM NAME",
+      "GRADE",
+      "VENDOR NAME",
+      "INVOICE NO",
+      "ITEM CODE",
+    ],
     excludeParentValues: { "INSPECTION-STATUS": ["Done"] },
     markParentDone: true,
     instructions:
-      "From Incoming Inspection: fill any of ITEM CATEGORY / ITEM NAME / GRADE, Fetch pending rows (not Done), enter shared Quality Inspection fields, set DEFECT QUANTITY per row. Submit creates Quality Inspection records and marks each parent INSPECTION-STATUS as Done.",
+      "From Incoming Inspection: fill any of ITEM CATEGORY / ITEM NAME / GRADE / VENDOR NAME / INVOICE NO / ITEM CODE, Fetch pending rows (not Done), enter shared Quality Inspection fields, set DEFECT QUANTITY per row. Submit creates Quality Inspection records and marks each parent INSPECTION-STATUS as Done.",
     singleEntryHeaders: [
       "DIMENSION",
       "DEFECT FOUND",
@@ -138,6 +145,7 @@ const bulkEntryConfigs = {
     parentDisplayHeaders: [
       "ITEM CATEGORY",
       "ITEM NAME",
+      "ITEM CODE",
       "GRADE",
       "QTY",
       "UNITS",
@@ -153,11 +161,18 @@ const bulkEntryConfigs = {
     processId: "QA/R/003A",
     sourceProcessId: "QA/R/003",
     filtersOptional: true,
-    filterHeaders: ["ITEM CATEGORY", "ITEM NAME", "GRADE"],
+    filterHeaders: [
+      "ITEM CATEGORY",
+      "ITEM NAME",
+      "GRADE",
+      "VENDOR NAME",
+      "INVOICE NO",
+      "ITEM CODE",
+    ],
     excludeParentValues: { "INSPECTION-STATUS": ["Done"] },
     markParentDone: true,
     instructions:
-      "From Quality Inspection: fill any of ITEM CATEGORY / ITEM NAME / GRADE, Fetch Incoming Inspection parents (not Done), enter shared QI fields, set DEFECT QUANTITY per row. Submit creates Quality Inspection records and marks each parent INSPECTION-STATUS as Done.",
+      "From Quality Inspection: fill any of ITEM CATEGORY / ITEM NAME / GRADE / VENDOR NAME / INVOICE NO / ITEM CODE, Fetch Incoming Inspection parents (not Done), enter shared QI fields, set DEFECT QUANTITY per row. Submit creates Quality Inspection records and marks each parent INSPECTION-STATUS as Done.",
     singleEntryHeaders: [
       "DIMENSION",
       "DEFECT FOUND",
@@ -169,6 +184,7 @@ const bulkEntryConfigs = {
     parentDisplayHeaders: [
       "ITEM CATEGORY",
       "ITEM NAME",
+      "ITEM CODE",
       "GRADE",
       "QTY",
       "UNITS",
