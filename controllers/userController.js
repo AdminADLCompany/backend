@@ -23,7 +23,7 @@ exports.getAllUsers = catchAsyncErrors(async (req, res, next) => {
 
 exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   // getting the request body details one by one from req.body
-  let { email, employeeId, name, role, password, department, accessLevel } =
+  let { email, employeeId, name, role, password, department, accessLevel, processAccess } =
     req.body;
 
   // Finding the user already exists or not.
@@ -64,6 +64,7 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
     role,
     department,
     accessLevel,
+    processAccess: Array.isArray(processAccess) ? processAccess : [],
     password,
   });
 
