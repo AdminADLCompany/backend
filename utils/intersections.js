@@ -56,6 +56,32 @@ const linkProcessIdItems = async (rowItems) => {
   return rowItems;
 };
 
+/** Build Incoming Inspection (QA/R/003) items from procurement parent + inward items */
+const buildIncomingInspectionItems = (procurementRow, inwardItems = []) => {
+  const p = (key) =>
+    procurementRow?.items?.find((i) => i.key === key)?.value;
+  const i = (key) => inwardItems.find((it) => it.key === key)?.value;
+  return [
+    { key: "PART NO", value: p("PART NO"), process: "value" },
+    { key: "PART NAME", value: p("PART NAME"), process: "value" },
+    { key: "ITEM CATEGORY", value: p("ITEM CATEGORY"), process: "value" },
+    { key: "ITEM CODE", value: p("ITEM CODE"), process: "value" },
+    { key: "ITEM NAME", value: p("ITEM NAME") || i("ITEM NAME"), process: "value" },
+    { key: "GRADE", value: p("GRADE"), process: "value" },
+    { key: "QTY", value: i("QTY"), process: "value" },
+    { key: "UNITS", value: p("UNITS"), process: "value" },
+    {
+      key: "VENDOR NAME",
+      value: p("VENDOR-NAME") || p("VENDOR NAME") || i("VENDOR NAME"),
+      process: "value",
+    },
+    { key: "INVOICE NO", value: i("INVOICE NO"), process: "value" },
+    { key: "DELIVERY DATE", value: i("DELIVERY DATE"), process: "date" },
+    { key: "QUALITY INSPECTION", value: "QA/R/003A", process: "processId" },
+    { key: "INSPECTION-STATUS", value: "", process: "select" },
+  ];
+};
+
 const parseEpochOrDate = (value) => {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number" && !isNaN(value)) return value;
@@ -251,7 +277,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         };
 
       const procurementRow = procurementProcess.data.find(
-        (row) => row._id.toString() === rowDataId,
+        (row) => row._id.toString() === rowDataId?.toString(),
       );
       if (!procurementRow)
         return {
@@ -268,74 +294,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const newInwardRowId = new mongoose.Types.ObjectId();
 
       const inspectionRow = {
-        items: [
-          {
-            key: "PART NO",
-            value: procurementRow.items.find((i) => i.key === "PART NO")?.value,
-            process: "value",
-          },
-          {
-            key: "PART NAME",
-            value: procurementRow.items.find((i) => i.key === "PART NAME")
-              ?.value,
-            process: "value",
-          },
-          {
-            key: "ITEM CATEGORY",
-            value: procurementRow.items.find((i) => i.key === "ITEM CATEGORY")
-              ?.value,
-            process: "value",
-          },
-          {
-            key: "ITEM CODE",
-            value: procurementRow.items.find((i) => i.key === "ITEM CODE")
-              ?.value,
-            process: "value",
-          },
-          {
-            key: "ITEM NAME",
-            value: procurementRow.items.find((i) => i.key === "ITEM NAME")
-              ?.value,
-            process: "value",
-          },
-          {
-            key: "GRADE",
-            value: procurementRow.items.find((i) => i.key === "GRADE")?.value,
-            process: "value",
-          },
-          {
-            key: "QTY",
-            value: items.find((i) => i.key === "QTY")?.value,
-            process: "value",
-          },
-          {
-            key: "UNITS",
-            value: procurementRow.items.find((i) => i.key === "UNITS")?.value,
-            process: "value",
-          },
-          {
-            key: "VENDOR NAME",
-            value: procurementRow.items.find((i) => i.key === "VENDOR-NAME")
-              ?.value,
-            process: "value",
-          },
-          {
-            key: "INVOICE NO",
-            value: items.find((i) => i.key === "INVOICE NO")?.value,
-            process: "value",
-          },
-          {
-            key: "DELIVERY DATE",
-            value: items.find((i) => i.key === "DELIVERY DATE")?.value,
-            process: "date",
-          },
-          {
-            key: "QUALITY INSPECTION",
-            value: "QA/R/003A",
-            process: "processId",
-          },
-          { key: "INSPECTION-STATUS", value: "", process: "select" },
-        ],
+        items: buildIncomingInspectionItems(procurementRow, items),
         rowDataId: newInwardRowId.toString(),
       };
 
@@ -1968,8 +1927,7 @@ exports.handleUpdateIntersection = async (
       await procurementRegisterProcess.save();
     }
 
-    // ---- PR/R/003A → PR/R/003 ----
-    // ---- PR/R/003A → PR/R/003 ----
+    // ---- PR/R/003A → PR/R/003 (+ Incoming Inspection on Move to Inspection) ----
     else if (process.processId === "PR/R/003A") {
       // 1️⃣ Get Procurement Register process
       const procurementProcess = await Process.findOne({
@@ -1979,17 +1937,24 @@ exports.handleUpdateIntersection = async (
 
       // 2️⃣ Filter inward rows linked to the current rowDataId (Procurement row _id)
       const matchRows = process.data.filter(
-        (r) => r.rowDataId === row.rowDataId,
+        (r) => r.rowDataId?.toString() === row.rowDataId?.toString(),
       );
       if (matchRows.length === 0) return { success: true };
 
       // 3️⃣ Sum DELIVERY QTY and DEFECT QTY from matchRows
+      // Use updated items for the current row being edited
       let totalDeliveryQty = 0;
       let totalDefectQty = 0;
 
       matchRows.forEach((inRow) => {
-        const delQty = Number(inRow.items.find((i) => i.key === "QTY")?.value || 0);
-        const defQty = Number(inRow.items.find((i) => i.key === "DEFECT QTY")?.value || 0);
+        const isCurrent = inRow._id.toString() === rowId?.toString();
+        const srcItems = isCurrent ? items : inRow.items;
+        const delQty = Number(
+          srcItems.find((i) => i.key === "QTY")?.value || 0,
+        );
+        const defQty = Number(
+          srcItems.find((i) => i.key === "DEFECT QTY")?.value || 0,
+        );
         totalDeliveryQty += delQty;
         totalDefectQty += defQty;
       });
@@ -1998,7 +1963,7 @@ exports.handleUpdateIntersection = async (
 
       // 4️⃣ Find the corresponding procurement row and update PENDING QTY
       const prRow = procurementProcess.data.find(
-        (r) => r._id.toString() === row.rowDataId.toString(),
+        (r) => r._id.toString() === row.rowDataId?.toString(),
       );
 
       if (prRow) {
@@ -2018,6 +1983,34 @@ exports.handleUpdateIntersection = async (
         
         procurementProcess.markModified("data");
         await procurementProcess.save();
+      }
+
+      // 5️⃣ Move to Inspection → create Incoming Inspection if missing
+      const isMoving = items.find(
+        (i) => i.key === "QC QUALITY INSPECTION",
+      )?.value;
+      if (isMoving === "Move to Inspection" && prRow) {
+        const inspectionProcess = await Process.findOne({
+          processId: "QA/R/003",
+        });
+        if (inspectionProcess) {
+          const inwardId = row._id.toString();
+          const exists = inspectionProcess.data.some(
+            (r) => r.rowDataId?.toString() === inwardId,
+          );
+          if (!exists) {
+            const inspectionRow = {
+              items: buildIncomingInspectionItems(prRow, items),
+              rowDataId: inwardId,
+            };
+            inspectionRow.items = await linkProcessIdItems(
+              inspectionRow.items,
+            );
+            inspectionProcess.data.push(inspectionRow);
+            inspectionProcess.updatedBy = userId;
+            await inspectionProcess.save();
+          }
+        }
       }
     }
 

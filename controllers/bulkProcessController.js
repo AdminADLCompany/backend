@@ -164,6 +164,8 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
 
   let invoiceNoOptions = [];
   let orderIdsForInvoice = null;
+  let poNoOptions = [];
+  let vendorNameOptions = [];
 
   if (processId === "MS/R/006A") {
     const dockets = await Process.findOne({ processId: "MS/R/006A" }).lean();
@@ -188,6 +190,40 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     if (invoiceFilter) {
       orderIdsForInvoice = orderIdSet;
     }
+  }
+
+  // Inward: pending procurement PO / vendor dropdown options
+  if (processId === "PR/R/003A" || config.sourceProcessId === "PR/R/003") {
+    const procurement =
+      sourceProcessId === "PR/R/003"
+        ? source
+        : await Process.findOne({ processId: "PR/R/003" }).lean();
+    const poSet = new Set();
+    const vendorSet = new Set();
+    for (const row of procurement?.data || []) {
+      const map = {};
+      for (const it of row.items || []) {
+        if (it?.key) map[it.key] = it.value;
+      }
+      const pendingQty = Number(map["PENDING QTY"]);
+      const isPending =
+        Number.isFinite(pendingQty) && !Number.isNaN(pendingQty)
+          ? pendingQty > 0
+          : String(map["PR STATUS"] ?? "")
+              .trim()
+              .toUpperCase() === "PENDING";
+      if (!isPending) continue;
+      const po = String(map["PO NO"] ?? "").trim();
+      const vendor = String(
+        map["VENDOR-NAME"] ?? map["VENDOR NAME"] ?? "",
+      ).trim();
+      if (po) poSet.add(po);
+      if (vendor) vendorSet.add(vendor);
+    }
+    poNoOptions = Array.from(poSet).sort((a, b) => a.localeCompare(b));
+    vendorNameOptions = Array.from(vendorSet).sort((a, b) =>
+      a.localeCompare(b),
+    );
   }
 
   let matched = (source.data || [])
@@ -241,6 +277,8 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     rows,
     singleEntryFromFetch,
     invoiceNoOptions,
+    poNoOptions,
+    vendorNameOptions,
   });
 });
 
