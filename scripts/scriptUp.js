@@ -129,6 +129,17 @@ const HEADER_RENAMES = [
       },
     ],
   },
+  {
+    processId: "QA/R/007",
+    description:
+      "Customer Complient Register — rename CUSTOMER NAME → CUSTOMER-NAME",
+    renames: [
+      {
+        from: "CUSTOMER NAME",
+        to: "CUSTOMER-NAME",
+      },
+    ],
+  },
 ];
 
 function isLocalUri(uri) {

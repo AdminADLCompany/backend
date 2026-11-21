@@ -1121,6 +1121,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     groupOfCustomerList.push([
       {
         "CUSTOMER-NAME": cName,
+        "CUSTOMER NAME": cName,
         LOCATION: cLocation || "",
       },
     ]);
@@ -1161,6 +1162,7 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
     { key: "VENDOR-NAME", value: Array.from(vendorName) },
     { key: "GRADE", value: Array.from(itemGrade) },
     { key: "CUSTOMER-NAME", value: Array.from(customerName) },
+    { key: "CUSTOMER NAME", value: Array.from(customerName) },
     { key: "ENQ BY", value: Array.from(employeeName) },
     { key: "ITEM_CODE", value: Array.from(itemCode) },
     { key: "PLAN-NO", value: Array.from(planNumber) },
