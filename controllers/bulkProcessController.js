@@ -230,7 +230,7 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     poNoOptions = Array.from(poSet).sort((a, b) => a.localeCompare(b));
   }
 
-  // Inward: pending procurement PO / vendor dropdown options
+  // Inward: pending procurement PO / vendor dropdown options (never CLOSED)
   if (processId === "PR/R/003A" || config.sourceProcessId === "PR/R/003") {
     const procurement =
       sourceProcessId === "PR/R/003"
@@ -243,13 +243,15 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
       for (const it of row.items || []) {
         if (it?.key) map[it.key] = it.value;
       }
+      const prStatus = String(map["PR STATUS"] ?? "")
+        .trim()
+        .toUpperCase();
+      if (prStatus === "CLOSED") continue;
       const pendingQty = Number(map["PENDING QTY"]);
       const isPending =
         Number.isFinite(pendingQty) && !Number.isNaN(pendingQty)
           ? pendingQty > 0
-          : String(map["PR STATUS"] ?? "")
-              .trim()
-              .toUpperCase() === "PENDING";
+          : prStatus === "PENDING" || prStatus === "";
       if (!isPending) continue;
       const po = String(map["PO NO"] ?? "").trim();
       const vendor = String(
@@ -300,6 +302,25 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     .filter(matchFilters)
     .filter(excludeByParentValues);
 
+  // Inward bulk: hide CLOSED / fully received procurement parents (no duplicates)
+  if (processId === "PR/R/003A") {
+    matched = matched.filter((row) => {
+      const map = {};
+      for (const it of row.items || []) {
+        if (it?.key) map[it.key] = it.value;
+      }
+      const prStatus = String(map["PR STATUS"] ?? "")
+        .trim()
+        .toUpperCase();
+      if (prStatus === "CLOSED") return false;
+      const pendingQty = Number(map["PENDING QTY"]);
+      if (Number.isFinite(pendingQty) && !Number.isNaN(pendingQty)) {
+        return pendingQty > 0;
+      }
+      return prStatus !== "CLOSED";
+    });
+  }
+
   if (orderIdsForInvoice) {
     matched = matched.filter((row) =>
       orderIdsForInvoice.has(row._id.toString()),
@@ -336,6 +357,11 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     }
     for (const key of config.singleEntryHeaders) {
       singleEntryFromFetch[key] = firstMap[key] ?? "";
+    }
+    // Inward: prefill PAYMENT from parent procurement aliases when blank
+    if (processId === "PR/R/003A" && !String(singleEntryFromFetch.PAYMENT || "").trim()) {
+      singleEntryFromFetch.PAYMENT =
+        firstMap["PAYMENT"] || firstMap["PAYMENT STATUS"] || "";
     }
   }
 
@@ -492,14 +518,32 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
           }
 
           const parentMap = itemsToMap(parentRow.items);
+          const parentPrStatus = String(parentMap["PR STATUS"] ?? "")
+            .trim()
+            .toUpperCase();
+          if (parentPrStatus === "CLOSED") {
+            throw new Error(
+              "Parent procurement PR STATUS is CLOSED — cannot create inward (duplicate)",
+            );
+          }
+
           const pendingQty = Number(
             parentMap["PENDING QTY"] ?? parentMap["QTY"] ?? 0,
           );
+          if (Number.isFinite(pendingQty) && pendingQty <= 0) {
+            throw new Error(
+              "Parent procurement has no PENDING QTY — cannot create inward",
+            );
+          }
           if (pendingQty > 0 && qty > pendingQty) {
             throw new Error(
               `QTY (${qty}) exceeds PENDING QTY (${pendingQty})`,
             );
           }
+
+          // PAYMENT from parent when shared field left blank
+          const parentPayment =
+            parentMap["PAYMENT"] || parentMap["PAYMENT STATUS"] || "";
 
           const valueMap = {
             ...singleEntry,
@@ -513,6 +557,10 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
               "",
             "PO NO":
               singleEntry["PO NO"] || parentMap["PO NO"] || "",
+            PAYMENT:
+              String(singleEntry["PAYMENT"] ?? "").trim() ||
+              String(parentPayment ?? "").trim() ||
+              "",
           };
 
           const items = buildOrderedItems(headers, valueMap);

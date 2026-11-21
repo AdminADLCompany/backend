@@ -104,6 +104,10 @@ const bulkEntryConfigs = {
     sourceProcessId: "PR/R/003",
     filtersOptional: true,
     filterHeaders: ["ITEM CATEGORY", "ITEM NAME", "PO NO", "VENDOR-NAME"],
+    // CLOSED procurement rows must not appear — prevents duplicate inward entries
+    excludeParentValues: { "PR STATUS": ["CLOSED"] },
+    instructions:
+      "From Inward: fill any of ITEM CATEGORY / ITEM NAME / PO NO / VENDOR-NAME, then Fetch open procurement parents (PR STATUS CLOSED is hidden). Enter shared fields; PAYMENT is taken from the parent when present. Set QTY / DEFECT QTY / VALUE per row.",
     singleEntryHeaders: [
       "INVOICE NO",
       "DELIVERY DATE",
@@ -117,6 +121,7 @@ const bulkEntryConfigs = {
       "VENDOR-NAME",
       "PO NO",
       "PENDING QTY",
+      "PR STATUS",
     ],
     multipleEntryHeaders: ["QTY", "DEFECT QTY", "VALUE"],
   },
