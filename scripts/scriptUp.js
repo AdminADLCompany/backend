@@ -111,6 +111,15 @@ const HEADER_UPDATES = [
       },
     ],
   },
+  {
+    processId: "QA/R/009",
+    description:
+      "Process Control Plan — PART NO / PART NAME at indexes 0–1 (from Product List parent)",
+    headers: [
+      { headerName: "PART NO", index: 0, processType: "value" },
+      { headerName: "PART NAME", index: 1, processType: "value" },
+    ],
+  },
 ];
 
 /**
