@@ -394,6 +394,13 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
           ...rowItems,
           ...singleEntry,
         };
+        // Procurement: never insert/update with blank PR STATUS
+        if (
+          createProcessId === "PR/R/003" &&
+          !String(valueMap["PR STATUS"] ?? "").trim()
+        ) {
+          valueMap["PR STATUS"] = "PENDING";
+        }
         const items = buildOrderedItems(headers, valueMap);
 
         if (row.rowId) {

@@ -115,6 +115,18 @@ const applyQuotationDefaults = (items) => {
     quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
 };
 
+/** New procurement rows default to PENDING — never leave PR STATUS blank. */
+const applyProcurementDefaults = (items) => {
+  const prStatusItem = items.find((i) => i.key === "PR STATUS");
+  if (!prStatusItem) {
+    items.push({ key: "PR STATUS", value: "PENDING", process: "value" });
+    return;
+  }
+  if (!String(prStatusItem.value || "").trim()) {
+    prStatusItem.value = "PENDING";
+  }
+};
+
 /**
  * Create one process row using the same intersection + side-effect path as addData.
  */
@@ -146,6 +158,8 @@ const createProcessRow = async (processId, items, rowDataId, userId) => {
 
   if (process.processId === "MS/R/005") {
     applyQuotationDefaults(items);
+  } else if (process.processId === "PR/R/003") {
+    applyProcurementDefaults(items);
   } else if (process.processId === "MS/R/006A") {
     const sync = await syncDocketOrderPending(process, items, rid);
     closed = !!sync.closed;
@@ -234,6 +248,8 @@ const updateProcessRow = async (processId, rowId, items, userId) => {
 
   if (process.processId === "MS/R/005") {
     applyQuotationDefaults(items);
+  } else if (process.processId === "PR/R/003") {
+    applyProcurementDefaults(items);
   }
 
   const oldData = { ...row.toObject() };

@@ -411,7 +411,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               { key: "PO NO", value: "" },
               { key: "LEAD TIME", value: "" },
               { key: "INWARD", value: "PR/R/003A", process: "processId" },
-              { key: "PR STATUS", value: "" },
+              { key: "PR STATUS", value: "PENDING" },
             ],
             rowDataId,
           };
@@ -1925,7 +1925,7 @@ exports.handleUpdateIntersection = async (
               { key: "PO NO", value: "" },
               { key: "LEAD TIME", value: "" },
               { key: "INWARD", value: "PR/R/003A", process: "processId" },
-              { key: "PR STATUS", value: "" },
+              { key: "PR STATUS", value: "PENDING" },
             ],
             rowDataId: rowId,
           };

@@ -354,6 +354,15 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
         }
       }
     }
+    // ---------------- PR/R/003 (Procurement) — PR STATUS never blank ----
+    else if (process.processId === "PR/R/003") {
+      const prStatusItem = items.find((i) => i.key === "PR STATUS");
+      if (!prStatusItem) {
+        items.push({ key: "PR STATUS", value: "PENDING", process: "value" });
+      } else if (!String(prStatusItem.value || "").trim()) {
+        prStatusItem.value = "PENDING";
+      }
+    }
     // ---- MS/R/006A → MS/R/006 ---- Order List -> Quotation list
     else if (process.processId === "MS/R/006A") {
       const orderProcess = await Process.findOne({
