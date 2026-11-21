@@ -1100,9 +1100,15 @@ exports.getProductDetails = catchAsyncErrors(async (req, res, next) => {
   let groupOfVendorList = [];
   vendorListProcess.data.forEach((row) => {
     const vName = row.items.find((i) => i.key === "VENDOR NAME")?.value;
+    const vAddress =
+      row.items.find((i) => i.key === "ADDRESS")?.value ||
+      row.items.find((i) => i.key === "Address")?.value ||
+      "";
     groupOfVendorList.push([
       {
         "VENDOR-NAME": vName,
+        "VENDOR NAME": vName,
+        ADDRESS: vAddress,
       },
     ]);
     if (vName) vendorName.add(vName);

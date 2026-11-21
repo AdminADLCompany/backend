@@ -89,6 +89,13 @@ const HEADER_UPDATES = [
       { headerName: "from.", index: 3, processType: "value" },
     ],
   },
+  {
+    processId: "PR/R/001",
+    description: "Vendor List — ADDRESS at index 4",
+    headers: [
+      { headerName: "ADDRESS", index: 4, processType: "value" },
+    ],
+  },
 ];
 
 /**
