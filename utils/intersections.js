@@ -1094,7 +1094,7 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
             },
             {
               key: "ORDER STATUS",
-              value: "",
+              value: "OPEN",
               process: "select",
             },
           ],
@@ -1574,6 +1574,20 @@ exports.handleUpdateIntersection = async (
             updateItem("PO NO", items.find((i) => i.key === "PO NO")?.value);
             updateItem("LEAD TIME", items.find((i) => i.key === "LEAD TIME")?.value);
 
+            // New/blank order rows default to OPEN (do not clear CLOSED)
+            const orderStatusItem = existingOrderListRow.items.find(
+              (i) => i.key === "ORDER STATUS",
+            );
+            if (!orderStatusItem) {
+              existingOrderListRow.items.push({
+                key: "ORDER STATUS",
+                value: "OPEN",
+                process: "select",
+              });
+            } else if (!String(orderStatusItem.value || "").trim()) {
+              orderStatusItem.value = "OPEN";
+            }
+
             orderListProcess.updatedBy = userId;
             orderListProcess.markModified("data");
           } else {
@@ -1661,7 +1675,7 @@ exports.handleUpdateIntersection = async (
                 },
                 {
                   key: "ORDER STATUS",
-                  value: "",
+                  value: "OPEN",
                   process: "select",
                 },
               ],

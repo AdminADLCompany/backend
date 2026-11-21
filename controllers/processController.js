@@ -342,10 +342,16 @@ exports.addData = catchAsyncErrors(async (req, res, next) => {
       const quotationItem = items.find((i) => i.key === "QUOTATION NO");
       const qlStatusItem = items.find((i) => i.key === "QL STATUS");
 
-      if (qlStatusItem && quotationItem !== "ORDER") {
-        const quotationNo = quotationItem?.value?.trim() || "";
-        qlStatusItem.value =
-          quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
+      if (qlStatusItem) {
+        const status = String(qlStatusItem.value || "")
+          .trim()
+          .toUpperCase();
+        // Keep ORDER / ORDER_HOLDED; otherwise derive from QUOTATION NO
+        if (status !== "ORDER" && status !== "ORDER_HOLDED") {
+          const quotationNo = quotationItem?.value?.trim() || "";
+          qlStatusItem.value =
+            quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
+        }
       }
     }
     // ---- MS/R/006A → MS/R/006 ---- Order List -> Quotation list

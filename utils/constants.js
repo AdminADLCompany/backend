@@ -61,8 +61,10 @@ const bulkEntryConfigs = {
     processId: "MS/R/006A",
     sourceProcessId: "MS/R/006",
     filtersOptional: true,
-    filterHeaders: ["ORDER STATUS", "INVOICE NO"],
+    filterHeaders: ["ORDER STATUS", "INVOICE NO", "PO NO"],
     defaultFilters: { "ORDER STATUS": "OPEN" },
+    instructions:
+      "From Dockets: fill any of ORDER STATUS / INVOICE NO / PO NO, Fetch Order List parents, enter shared docket fields, set DELIVERY QTY / VALUE per row. Submit creates Dockets linked to each parent order.",
     singleEntryHeaders: [
       "INVOICE NO",
       "DELIVERY DATE",
@@ -89,10 +91,11 @@ const bulkEntryConfigs = {
     filterHeaders: [
       "ITEM CATEGORY",
       "ITEM NAME",
-      "GRADE",
-      "TYPE",
       "VENDOR-NAME",
+      "PR STATUS",
     ],
+    instructions:
+      "From Procurement Register: fill any of ITEM CATEGORY / ITEM NAME / VENDOR-NAME / PR STATUS, then Fetch. Only filled filters are applied. Shared fields apply to every selected row on Submit.",
     singleEntryHeaders: ["VENDOR-NAME", "PO NO", "LEAD TIME", "PR STATUS"],
   },
   "PR/R/003A": {

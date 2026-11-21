@@ -1,12 +1,12 @@
 /*
- * Apply local Process header updates (insert-at-index) and align row items.
+ * Apply local Process header updates (insert / rename) and align row items.
  *
  *   npm run script:up
  *   node scripts/scriptUp.js
  *
  * Uses DB_LOCAL_URI from config/config.env.
  * Refuses non-local MongoDB unless --allow-remote is passed.
- * Idempotent: skips headers that already exist on the process.
+ * Idempotent: skips inserts that already exist; renames skip if already applied.
  */
 const path = require("path");
 const mongoose = require("mongoose");
@@ -69,6 +69,41 @@ const HEADER_UPDATES = [
         headerName: "PART NAME",
         afterHeader: "PART NO",
         processType: "value",
+      },
+    ],
+  },
+  {
+    processId: "DD/R/011",
+    description: "Product Sample List — DATE at index 1 (after S.NO)",
+    headers: [
+      { headerName: "DATE", index: 1, processType: "date" },
+    ],
+  },
+  {
+    processId: "DD/R/014",
+    description:
+      "Product Validation Report — NO. / PART / from. at indexes 1–3 (from NPD parent)",
+    headers: [
+      { headerName: "NO.", index: 1, processType: "value" },
+      { headerName: "PART", index: 2, processType: "value" },
+      { headerName: "from.", index: 3, processType: "value" },
+    ],
+  },
+];
+
+/**
+ * Rename existing headers + matching row item keys (idempotent).
+ * Does not change values or process types — only the key/header label.
+ */
+const HEADER_RENAMES = [
+  {
+    processId: "DD/R/012",
+    description:
+      "NPD Proto Model — rename PRODUCT STUDY → PRODUCT STUDY AND SAMPLES",
+    renames: [
+      {
+        from: "PRODUCT STUDY",
+        to: "PRODUCT STUDY AND SAMPLES",
       },
     ],
   },
@@ -148,6 +183,102 @@ function insertHeadersOnProcess(process, inserts) {
   return { applied, skipped };
 }
 
+function renameHeadersOnProcess(process, renames) {
+  const applied = [];
+  const skipped = [];
+  let changed = false;
+
+  for (const entry of renames || []) {
+    const from = String(entry.from || "").trim();
+    const to = String(entry.to || "").trim();
+    if (!from || !to || from === to) continue;
+
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+    const headers = process.headers || [];
+
+    const fromIdx = headers.findIndex(
+      (h) => String(h).trim().toUpperCase() === fromUpper,
+    );
+    const toExists = headers.some(
+      (h) => String(h).trim().toUpperCase() === toUpper,
+    );
+
+    if (fromIdx < 0) {
+      skipped.push(toExists ? `${from} (already ${to})` : `${from} (not found)`);
+      // Still fix any stray row items that still use the old key
+      let itemFixes = 0;
+      for (const row of process.data || []) {
+        for (const item of row.items || []) {
+          if (String(item.key || "").trim().toUpperCase() === fromUpper) {
+            item.key = to;
+            itemFixes += 1;
+            changed = true;
+          }
+        }
+      }
+      if (itemFixes) {
+        applied.push({ from, to, scope: `items-only (${itemFixes})` });
+      }
+      continue;
+    }
+
+    if (toExists) {
+      // New name already present — drop duplicate old header, keep new
+      headers.splice(fromIdx, 1);
+      changed = true;
+      let itemFixes = 0;
+      for (const row of process.data || []) {
+        if (!Array.isArray(row.items)) continue;
+        const oldItems = row.items.filter(
+          (i) => String(i.key || "").trim().toUpperCase() === fromUpper,
+        );
+        const newItem = row.items.find(
+          (i) => String(i.key || "").trim().toUpperCase() === toUpper,
+        );
+        for (const oldItem of oldItems) {
+          if (newItem && (newItem.value == null || newItem.value === "")) {
+            newItem.value = oldItem.value;
+          }
+          const idx = row.items.indexOf(oldItem);
+          if (idx >= 0) row.items.splice(idx, 1);
+          itemFixes += 1;
+        }
+      }
+      applied.push({
+        from,
+        to,
+        scope: `dedupe-header${itemFixes ? `+items(${itemFixes})` : ""}`,
+      });
+      continue;
+    }
+
+    headers[fromIdx] = to;
+    changed = true;
+    let itemFixes = 0;
+    for (const row of process.data || []) {
+      for (const item of row.items || []) {
+        if (String(item.key || "").trim().toUpperCase() === fromUpper) {
+          item.key = to;
+          itemFixes += 1;
+        }
+      }
+    }
+    applied.push({
+      from,
+      to,
+      scope: `header+items(${itemFixes})`,
+    });
+  }
+
+  if (changed) {
+    process.markModified("headers");
+    process.markModified("data");
+  }
+
+  return { applied, skipped };
+}
+
 async function main() {
   if (!dbUri) {
     throw new Error("DB_LOCAL_URI is not set in config/config.env");
@@ -203,7 +334,52 @@ async function main() {
   }
 
   console.log(
-    `\nDone. Applied ${totalApplied} header(s), skipped ${totalSkipped}.`,
+    `\nDone inserts. Applied ${totalApplied} header(s), skipped ${totalSkipped}.`,
+  );
+
+  let totalRenamed = 0;
+  let totalRenameSkipped = 0;
+
+  for (const update of HEADER_RENAMES) {
+    const process = await Process.findOne({ processId: update.processId });
+    if (!process) {
+      console.warn(
+        `⚠  Process ${update.processId} not found — skip rename (${update.description || ""})`,
+      );
+      continue;
+    }
+
+    console.log(
+      `\n→ rename ${update.processId} (${process.process}) — ${update.description || "header rename"}`,
+    );
+    console.log(`  before: [${(process.headers || []).join(", ")}]`);
+
+    const { applied, skipped } = renameHeadersOnProcess(
+      process,
+      update.renames || [],
+    );
+
+    if (applied.length) {
+      await process.save();
+      totalRenamed += applied.length;
+      console.log(
+        `  renamed: ${applied
+          .map((a) => `${a.from} → ${a.to} [${a.scope}]`)
+          .join("; ")}`,
+      );
+      console.log(`  after:  [${(process.headers || []).join(", ")}]`);
+    } else {
+      console.log("  nothing to rename");
+    }
+
+    if (skipped.length) {
+      totalRenameSkipped += skipped.length;
+      console.log(`  skipped: ${skipped.join(", ")}`);
+    }
+  }
+
+  console.log(
+    `\nDone renames. Applied ${totalRenamed}, skipped ${totalRenameSkipped}.`,
   );
 
   console.log("\n→ SerialNumber seeds");

@@ -191,6 +191,43 @@ exports.bulkFetch = catchAsyncErrors(async (req, res, next) => {
     if (invoiceFilter) {
       orderIdsForInvoice = orderIdSet;
     }
+
+    // PO NO options from Order List (source), prefer OPEN / pending qty > 0
+    const orderList =
+      sourceProcessId === "MS/R/006"
+        ? source
+        : await Process.findOne({ processId: "MS/R/006" }).lean();
+    const poSet = new Set();
+    for (const row of orderList?.data || []) {
+      const map = {};
+      for (const it of row.items || []) {
+        if (it?.key) map[it.key] = it.value;
+      }
+      const po = String(map["PO NO"] ?? "").trim();
+      if (!po) continue;
+      const pendingQty = Number(map["PENDING QTY"]);
+      const status = String(map["ORDER STATUS"] ?? "")
+        .trim()
+        .toUpperCase();
+      const isOpen =
+        status === "OPEN" ||
+        (Number.isFinite(pendingQty) &&
+          !Number.isNaN(pendingQty) &&
+          pendingQty > 0) ||
+        (!status &&
+          !(Number.isFinite(pendingQty) && !Number.isNaN(pendingQty)));
+      if (isOpen) poSet.add(po);
+    }
+    // Fallback: all distinct PO NOs if none matched open/pending
+    if (poSet.size === 0) {
+      for (const row of orderList?.data || []) {
+        const po = String(
+          (row.items || []).find((i) => i.key === "PO NO")?.value ?? "",
+        ).trim();
+        if (po) poSet.add(po);
+      }
+    }
+    poNoOptions = Array.from(poSet).sort((a, b) => a.localeCompare(b));
   }
 
   // Inward: pending procurement PO / vendor dropdown options
@@ -343,12 +380,19 @@ exports.bulkUpsert = catchAsyncErrors(async (req, res, next) => {
   const failed = [];
 
   if (config.mode === "blankMultiCreate") {
+    // Shared single-entry fields must win over any leftover keys in row.items
+    // (e.g. QL STATUS "ORDER" must not be clobbered by a fetched waiting status).
+    const singleKeys = new Set(config.singleEntryHeaders || []);
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
+        const rowItems = { ...(row.items || {}) };
+        for (const key of singleKeys) {
+          delete rowItems[key];
+        }
         const valueMap = {
+          ...rowItems,
           ...singleEntry,
-          ...(row.items || {}),
         };
         const items = buildOrderedItems(headers, valueMap);
 

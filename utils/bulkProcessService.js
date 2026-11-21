@@ -102,11 +102,17 @@ const syncDocketOrderPending = async (docketProcess, items, rowDataId) => {
 const applyQuotationDefaults = (items) => {
   const quotationItem = items.find((i) => i.key === "QUOTATION NO");
   const qlStatusItem = items.find((i) => i.key === "QL STATUS");
-  if (qlStatusItem && quotationItem !== "ORDER") {
-    const quotationNo = quotationItem?.value?.trim() || "";
-    qlStatusItem.value =
-      quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
-  }
+  if (!qlStatusItem) return;
+
+  // Preserve explicit order statuses (do not derive from QUOTATION NO)
+  const status = String(qlStatusItem.value || "")
+    .trim()
+    .toUpperCase();
+  if (status === "ORDER" || status === "ORDER_HOLDED") return;
+
+  const quotationNo = quotationItem?.value?.trim() || "";
+  qlStatusItem.value =
+    quotationNo === "" ? "WAITING FOR QUOTE" : "WAITING FOR ORDER";
 };
 
 /**
