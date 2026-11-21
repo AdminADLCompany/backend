@@ -21,6 +21,7 @@ const {
   prefixForType,
   DEFAULT_PAD_LENGTH,
 } = require("../utils/serialNumber");
+const { recalculateStockDataItems } = require("../utils/intersections");
 
 const ALLOW_REMOTE = process.argv.includes("--allow-remote");
 const dbUri = process.env.DB_LOCAL_URI;
@@ -96,6 +97,20 @@ const HEADER_UPDATES = [
       { headerName: "ADDRESS", index: 4, processType: "value" },
     ],
   },
+  {
+    processId: "ST/R/006",
+    description:
+      "Stock Data — REJECT after OUT, REQUEST after REJECT, FOLLOW UP after STOCK",
+    headers: [
+      { headerName: "REJECT", afterHeader: "OUT", processType: "value" },
+      { headerName: "REQUEST", afterHeader: "REJECT", processType: "value" },
+      {
+        headerName: "FOLLOW UP",
+        afterHeader: "STOCK",
+        processType: "value",
+      },
+    ],
+  },
 ];
 
 /**
@@ -127,16 +142,18 @@ function insertHeadersOnProcess(process, inserts) {
     (process.headers || []).map((h) => String(h).trim().toUpperCase()),
   );
 
-  const toApply = [];
   const skipped = [];
+  const applied = [];
 
+  // Apply in declaration order so chained afterHeader inserts see prior splices
   for (const entry of inserts) {
-    const name = String(entry.headerName || "").trim();
-    if (!name) continue;
-    if (existing.has(name.toUpperCase())) {
-      skipped.push(name);
+    const headerName = String(entry.headerName || "").trim();
+    if (!headerName) continue;
+    if (existing.has(headerName.toUpperCase())) {
+      skipped.push(headerName);
       continue;
     }
+
     let index = Number(entry.index);
     if (
       (!Number.isInteger(index) || index < 0) &&
@@ -148,23 +165,14 @@ function insertHeadersOnProcess(process, inserts) {
       );
       index = afterIdx >= 0 ? afterIdx + 1 : (process.headers || []).length;
     }
-    toApply.push({
-      headerName: name,
-      index,
-      processType: entry.processType || "",
-    });
-  }
 
-  // Ascending index so consecutive inserts land correctly after each splice
-  toApply.sort((a, b) => a.index - b.index);
-
-  const applied = [];
-  for (const { headerName, index, processType } of toApply) {
     if (!Number.isInteger(index) || index < 0) {
       throw new Error(
         `Invalid index ${index} for header "${headerName}" on ${process.processId}`,
       );
     }
+
+    const processType = entry.processType || "";
     const clampIndex = Math.min(Math.max(index, 0), process.headers.length);
     process.headers.splice(clampIndex, 0, headerName);
 
@@ -188,6 +196,28 @@ function insertHeadersOnProcess(process, inserts) {
   }
 
   return { applied, skipped };
+}
+
+/** Normalize qty cells and recompute STOCK / FOLLOW UP on Stock Data rows. */
+function backfillStockDataFormulas(process) {
+  let rowsUpdated = 0;
+  for (const row of process.data || []) {
+    if (!Array.isArray(row.items)) row.items = [];
+    recalculateStockDataItems(row.items);
+    // Ensure blank numeric cells persist as "0" (helper already defaults missing)
+    for (const key of ["IN", "OUT", "REJECT", "REQUEST", "STOCK", "FOLLOW UP"]) {
+      const item = row.items.find((i) => String(i.key || "").trim() === key);
+      if (item && (item.value === "" || item.value == null)) {
+        item.value = "0";
+      }
+    }
+    recalculateStockDataItems(row.items);
+    rowsUpdated += 1;
+  }
+  if (rowsUpdated) {
+    process.markModified("data");
+  }
+  return rowsUpdated;
 }
 
 function renameHeadersOnProcess(process, renames) {
@@ -343,6 +373,25 @@ async function main() {
   console.log(
     `\nDone inserts. Applied ${totalApplied} header(s), skipped ${totalSkipped}.`,
   );
+
+  // Stock Data formula backfill (idempotent — safe after header insert or re-run)
+  {
+    const stockProcess = await Process.findOne({ processId: "ST/R/006" });
+    if (stockProcess) {
+      console.log(
+        `\n→ ST/R/006 Stock Data — backfill STOCK / FOLLOW UP formulas`,
+      );
+      const rowsUpdated = backfillStockDataFormulas(stockProcess);
+      if (rowsUpdated) {
+        await stockProcess.save();
+        console.log(`  recalculated ${rowsUpdated} row(s)`);
+      } else {
+        console.log("  no rows to backfill");
+      }
+    } else {
+      console.warn("⚠  Process ST/R/006 not found — skip formula backfill");
+    }
+  }
 
   let totalRenamed = 0;
   let totalRenameSkipped = 0;

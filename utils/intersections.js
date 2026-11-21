@@ -41,6 +41,76 @@ const calculateBreaks = (start, end, lossArray) => {
 
 exports.calculateBreaks = calculateBreaks;
 
+const STOCK_QTY_KEYS = ["IN", "OUT", "REJECT", "REQUEST", "STOCK", "FOLLOW UP"];
+
+const getStockNum = (items, key) => {
+  const item = (items || []).find((i) => String(i.key || "").trim() === key);
+  const n = parseFloat(item?.value ?? 0);
+  return Number.isFinite(n) && !Number.isNaN(n) ? n : 0;
+};
+
+const ensureStockItem = (items, key, fallback = "0") => {
+  let item = items.find((i) => String(i.key || "").trim() === key);
+  if (!item) {
+    item = { key, value: fallback, process: "value" };
+    items.push(item);
+  } else if (item.value === "" || item.value == null) {
+    item.value = fallback;
+  }
+  return item;
+};
+
+/**
+ * Stock Data (ST/R/006) formulas:
+ *   STOCK = IN - OUT - REJECT
+ *   FOLLOW UP = REQUEST - REJECT - OUT
+ * Ensures qty cells exist (default 0) and recomputes STOCK / FOLLOW UP in place.
+ */
+const recalculateStockDataItems = (items) => {
+  if (!Array.isArray(items)) return items;
+  for (const key of STOCK_QTY_KEYS) {
+    ensureStockItem(items, key, "0");
+  }
+  const inn = getStockNum(items, "IN");
+  const out = getStockNum(items, "OUT");
+  const reject = getStockNum(items, "REJECT");
+  const request = getStockNum(items, "REQUEST");
+  const stockItem = items.find((i) => String(i.key || "").trim() === "STOCK");
+  const followItem = items.find(
+    (i) => String(i.key || "").trim() === "FOLLOW UP",
+  );
+  if (stockItem) stockItem.value = String(inn - out - reject);
+  if (followItem) followItem.value = String(request - reject - out);
+  return items;
+};
+
+/** Build a full Stock Data items array from identity + optional qty overrides. */
+const buildStockDataItems = ({
+  itemCategory = "",
+  itemCode = "",
+  itemName = "",
+  inn = 0,
+  out = 0,
+  reject = 0,
+  request = 0,
+} = {}) => {
+  const items = [
+    { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
+    { key: "ITEM CODE", value: itemCode, process: "value" },
+    { key: "ITEM NAME", value: itemName, process: "value" },
+    { key: "IN", value: String(inn), process: "value" },
+    { key: "OUT", value: String(out), process: "value" },
+    { key: "REJECT", value: String(reject), process: "value" },
+    { key: "REQUEST", value: String(request), process: "value" },
+    { key: "STOCK", value: "0", process: "value" },
+    { key: "FOLLOW UP", value: "0", process: "value" },
+  ];
+  recalculateStockDataItems(items);
+  return items;
+};
+
+exports.recalculateStockDataItems = recalculateStockDataItems;
+exports.buildStockDataItems = buildStockDataItems;
 
 const linkProcessIdItems = async (rowItems) => {
   if (!rowItems || !Array.isArray(rowItems)) return rowItems;
@@ -444,14 +514,11 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       const itemCategory = items.find((i) => i.key === "ITEM CATEGORY")?.value;
 
       const stockDataRow = {
-        items: [
-          { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
-          { key: "ITEM CODE", value: itemCode, process: "value" },
-          { key: "ITEM NAME", value: itemName, process: "value" },
-          { key: "IN", value: "0", process: "value" },
-          { key: "OUT", value: "0", process: "value" },
-          { key: "STOCK", value: "0", process: "value" },
-        ],
+        items: buildStockDataItems({
+          itemCategory,
+          itemCode,
+          itemName,
+        }),
         rowDataId,
       };
 
@@ -552,30 +619,18 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         );
 
         if (stockRow) {
-          const inItem = stockRow.items.find((i) => i.key === "IN");
-          const outItem = stockRow.items.find((i) => i.key === "OUT");
-          const stockItem = stockRow.items.find((i) => i.key === "STOCK");
-
-          const currentIn = parseFloat(inItem?.value || 0);
-          const currentOut = parseFloat(outItem?.value || 0);
-
-          const newIn = currentIn + quantity;
-          if (inItem) inItem.value = newIn.toString();
-          if (stockItem) stockItem.value = (newIn - currentOut).toString();
+          const inItem = ensureStockItem(stockRow.items, "IN");
+          const currentIn = parseFloat(inItem.value || 0) || 0;
+          inItem.value = String(currentIn + quantity);
+          recalculateStockDataItems(stockRow.items);
         } else {
           stockDataProcess.data.push({
-            items: [
-              {
-                key: "ITEM CATEGORY",
-                value: itemCategory || "",
-                process: "value",
-              },
-              { key: "ITEM CODE", value: itemCode || "", process: "value" },
-              { key: "ITEM NAME", value: itemName || "", process: "value" },
-              { key: "IN", value: quantityValue, process: "value" },
-              { key: "OUT", value: "0", process: "value" },
-              { key: "STOCK", value: quantityValue, process: "value" },
-            ],
+            items: buildStockDataItems({
+              itemCategory: itemCategory || "",
+              itemCode: itemCode || "",
+              itemName: itemName || "",
+              inn: quantity,
+            }),
             rowDataId,
           });
         }
@@ -627,34 +682,18 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
         );
 
         if (compStockRow) {
-          const inItem = compStockRow.items.find((i) => i.key === "IN");
-          const outItem = compStockRow.items.find((i) => i.key === "OUT");
-          const stockItem = compStockRow.items.find((i) => i.key === "STOCK");
-
-          const currentIn = parseFloat(inItem?.value || 0);
-          const currentOut = parseFloat(outItem?.value || 0);
-
-          const newOut = currentOut + totalOutQty;
-          if (outItem) outItem.value = newOut.toString();
-          if (stockItem) stockItem.value = (currentIn - newOut).toString();
+          const outItem = ensureStockItem(compStockRow.items, "OUT");
+          const currentOut = parseFloat(outItem.value || 0) || 0;
+          outItem.value = String(currentOut + totalOutQty);
+          recalculateStockDataItems(compStockRow.items);
         } else {
           stockDataProcess.data.push({
-            items: [
-              {
-                key: "ITEM CATEGORY",
-                value: bomItemCategory,
-                process: "value",
-              },
-              { key: "ITEM CODE", value: bomItemCode, process: "value" },
-              { key: "ITEM NAME", value: bomItemName, process: "value" },
-              { key: "IN", value: "0", process: "value" },
-              { key: "OUT", value: totalOutQty.toString(), process: "value" },
-              {
-                key: "STOCK",
-                value: (-totalOutQty).toString(),
-                process: "value",
-              },
-            ],
+            items: buildStockDataItems({
+              itemCategory: bomItemCategory,
+              itemCode: bomItemCode,
+              itemName: bomItemName,
+              out: totalOutQty,
+            }),
             rowDataId,
           });
         }
@@ -774,30 +813,18 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       }
 
       if (stockRow) {
-        const inItem = stockRow.items.find((i) => i.key === "IN");
-        const outItem = stockRow.items.find((i) => i.key === "OUT");
-        const stockItem = stockRow.items.find((i) => i.key === "STOCK");
-
-        const currentIn = parseFloat(inItem?.value || 0);
-        const currentOut = parseFloat(outItem?.value || 0);
-
-        const newOut = currentOut + quantity;
-        if (outItem) outItem.value = newOut.toString();
-        if (stockItem) stockItem.value = (currentIn - newOut).toString();
+        const outItem = ensureStockItem(stockRow.items, "OUT");
+        const currentOut = parseFloat(outItem.value || 0) || 0;
+        outItem.value = String(currentOut + quantity);
+        recalculateStockDataItems(stockRow.items);
       } else {
         stockDataProcess.data.push({
-          items: [
-            {
-              key: "ITEM CATEGORY",
-              value: itemCategory || "",
-              process: "value",
-            },
-            { key: "ITEM CODE", value: itemCode || "", process: "value" },
-            { key: "ITEM NAME", value: itemName || "", process: "value" },
-            { key: "IN", value: "0", process: "value" },
-            { key: "OUT", value: quantity.toString(), process: "value" },
-            { key: "STOCK", value: (-quantity).toString(), process: "value" },
-          ],
+          items: buildStockDataItems({
+            itemCategory: itemCategory || "",
+            itemCode: itemCode || "",
+            itemName: itemName || "",
+            out: quantity,
+          }),
           rowDataId,
         });
       }
@@ -1358,22 +1385,8 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
       }
 
       if (stockRow) {
-        let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
-        let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
-        let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
-
-        if (!inItem) {
-          inItem = { key: "IN", value: "0", process: "value" };
-          stockRow.items.push(inItem);
-        }
-        if (!outItem) {
-          outItem = { key: "OUT", value: "0", process: "value" };
-          stockRow.items.push(outItem);
-        }
-        if (!stockItem) {
-          stockItem = { key: "STOCK", value: "0", process: "value" };
-          stockRow.items.push(stockItem);
-        }
+        const inItem = ensureStockItem(stockRow.items, "IN");
+        const outItem = ensureStockItem(stockRow.items, "OUT");
 
         let currentIn = parseFloat(inItem.value || 0) || 0;
         let currentOut = parseFloat(outItem.value || 0) || 0;
@@ -1386,21 +1399,19 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
           outItem.value = currentOut.toString();
         }
 
-        stockItem.value = (currentIn - currentOut).toString();
+        recalculateStockDataItems(stockRow.items);
       } else {
         const initialIn = inOut === "IN" ? qty : 0;
         const initialOut = inOut === "OUT" ? qty : 0;
-        const initialStock = initialIn - initialOut;
 
         stockDataProcess.data.push({
-          items: [
-            { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
-            { key: "ITEM CODE", value: itemCode, process: "value" },
-            { key: "ITEM NAME", value: itemName, process: "value" },
-            { key: "IN", value: initialIn.toString(), process: "value" },
-            { key: "OUT", value: initialOut.toString(), process: "value" },
-            { key: "STOCK", value: initialStock.toString(), process: "value" },
-          ],
+          items: buildStockDataItems({
+            itemCategory,
+            itemCode,
+            itemName,
+            inn: initialIn,
+            out: initialOut,
+          }),
           rowDataId,
         });
       }
@@ -2287,38 +2298,27 @@ exports.handleUpdateIntersection = async (
           );
 
           if (existingStockRow) {
-            // 🟢 Update existing stock entry incrementally using the diffQty
-            const inItem = existingStockRow.items.find((i) => i.key === "IN");
-            const outItem = existingStockRow.items.find((i) => i.key === "OUT");
-            const stockItem = existingStockRow.items.find((i) => i.key === "STOCK");
-
-            const currentIn = Number(inItem?.value || 0);
-            const currentOut = Number(outItem?.value || 0);
-
-            const newIn = currentIn + diffQty;
-            const newStock = newIn - currentOut;
-
-            // Update values
-            if (inItem) inItem.value = newIn.toString();
-            if (stockItem) stockItem.value = newStock.toString();
+            // Update existing stock entry incrementally using the diffQty
+            const inItem = ensureStockItem(existingStockRow.items, "IN");
+            const currentIn = Number(inItem.value || 0) || 0;
+            inItem.value = String(currentIn + diffQty);
+            recalculateStockDataItems(existingStockRow.items);
 
             stockDataProcess.updatedBy = userId;
             stockDataProcess.markModified("data");
           } else {
-            // 🔵 Create new stock entry for this item
+            // Create new stock entry for this item
             const itemCategory =
               items.find((i) => i.key === "ITEM CATEGORY")?.value || "";
             const itemName = items.find((i) => i.key === "ITEM NAME")?.value || "";
 
             const newStockRow = {
-              items: [
-                { key: "ITEM CATEGORY", value: itemCategory, process: "value" },
-                { key: "ITEM CODE", value: itemCode, process: "value" },
-                { key: "ITEM NAME", value: itemName, process: "value" },
-                { key: "IN", value: newStoreQty.toString(), process: "value" },
-                { key: "OUT", value: "0", process: "value" },
-                { key: "STOCK", value: newStoreQty.toString(), process: "value" },
-              ],
+              items: buildStockDataItems({
+                itemCategory,
+                itemCode,
+                itemName,
+                inn: newStoreQty,
+              }),
               rowDataId: row.rowDataId,
             };
 
@@ -2800,22 +2800,8 @@ exports.handleUpdateIntersection = async (
       if (isSameItem) {
         let stockRow = findStockRow(newItemCode, newItemCategory);
         if (stockRow) {
-          let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
-          let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
-          let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
-
-          if (!inItem) {
-            inItem = { key: "IN", value: "0", process: "value" };
-            stockRow.items.push(inItem);
-          }
-          if (!outItem) {
-            outItem = { key: "OUT", value: "0", process: "value" };
-            stockRow.items.push(outItem);
-          }
-          if (!stockItem) {
-            stockItem = { key: "STOCK", value: "0", process: "value" };
-            stockRow.items.push(stockItem);
-          }
+          const inItem = ensureStockItem(stockRow.items, "IN");
+          const outItem = ensureStockItem(stockRow.items, "OUT");
 
           let currentIn = parseFloat(inItem.value || 0) || 0;
           let currentOut = parseFloat(outItem.value || 0) || 0;
@@ -2836,21 +2822,19 @@ exports.handleUpdateIntersection = async (
 
           inItem.value = currentIn.toString();
           outItem.value = currentOut.toString();
-          stockItem.value = (currentIn - currentOut).toString();
+          recalculateStockDataItems(stockRow.items);
         } else if (newItemCode) {
           const initialIn = newInOut === "IN" ? newQty : 0;
           const initialOut = newInOut === "OUT" ? newQty : 0;
-          const initialStock = initialIn - initialOut;
 
           stockDataProcess.data.push({
-            items: [
-              { key: "ITEM CATEGORY", value: newItemCategory, process: "value" },
-              { key: "ITEM CODE", value: newItemCode, process: "value" },
-              { key: "ITEM NAME", value: newItemName, process: "value" },
-              { key: "IN", value: initialIn.toString(), process: "value" },
-              { key: "OUT", value: initialOut.toString(), process: "value" },
-              { key: "STOCK", value: initialStock.toString(), process: "value" },
-            ],
+            items: buildStockDataItems({
+              itemCategory: newItemCategory,
+              itemCode: newItemCode,
+              itemName: newItemName,
+              inn: initialIn,
+              out: initialOut,
+            }),
             rowDataId: row.rowDataId || rowId,
           });
         }
@@ -2859,21 +2843,20 @@ exports.handleUpdateIntersection = async (
         if (prevItemCode) {
           let prevStockRow = findStockRow(prevItemCode, prevItemCategory);
           if (prevStockRow) {
-            let inItem = prevStockRow.items.find((i) => i.key.trim() === "IN");
-            let outItem = prevStockRow.items.find((i) => i.key.trim() === "OUT");
-            let stockItem = prevStockRow.items.find((i) => i.key.trim() === "STOCK");
+            const inItem = ensureStockItem(prevStockRow.items, "IN");
+            const outItem = ensureStockItem(prevStockRow.items, "OUT");
 
-            let currentIn = parseFloat(inItem?.value || 0) || 0;
-            let currentOut = parseFloat(outItem?.value || 0) || 0;
+            let currentIn = parseFloat(inItem.value || 0) || 0;
+            let currentOut = parseFloat(outItem.value || 0) || 0;
 
             if (prevInOut === "IN") {
               currentIn -= prevQty;
-              if (inItem) inItem.value = currentIn.toString();
+              inItem.value = currentIn.toString();
             } else if (prevInOut === "OUT") {
               currentOut -= prevQty;
-              if (outItem) outItem.value = currentOut.toString();
+              outItem.value = currentOut.toString();
             }
-            if (stockItem) stockItem.value = (currentIn - currentOut).toString();
+            recalculateStockDataItems(prevStockRow.items);
           }
         }
 
@@ -2881,22 +2864,8 @@ exports.handleUpdateIntersection = async (
         if (newItemCode) {
           let newStockRow = findStockRow(newItemCode, newItemCategory);
           if (newStockRow) {
-            let inItem = newStockRow.items.find((i) => i.key.trim() === "IN");
-            let outItem = newStockRow.items.find((i) => i.key.trim() === "OUT");
-            let stockItem = newStockRow.items.find((i) => i.key.trim() === "STOCK");
-
-            if (!inItem) {
-              inItem = { key: "IN", value: "0", process: "value" };
-              newStockRow.items.push(inItem);
-            }
-            if (!outItem) {
-              outItem = { key: "OUT", value: "0", process: "value" };
-              newStockRow.items.push(outItem);
-            }
-            if (!stockItem) {
-              stockItem = { key: "STOCK", value: "0", process: "value" };
-              newStockRow.items.push(stockItem);
-            }
+            const inItem = ensureStockItem(newStockRow.items, "IN");
+            const outItem = ensureStockItem(newStockRow.items, "OUT");
 
             let currentIn = parseFloat(inItem.value || 0) || 0;
             let currentOut = parseFloat(outItem.value || 0) || 0;
@@ -2908,21 +2877,19 @@ exports.handleUpdateIntersection = async (
               currentOut += newQty;
               outItem.value = currentOut.toString();
             }
-            stockItem.value = (currentIn - currentOut).toString();
+            recalculateStockDataItems(newStockRow.items);
           } else {
             const initialIn = newInOut === "IN" ? newQty : 0;
             const initialOut = newInOut === "OUT" ? newQty : 0;
-            const initialStock = initialIn - initialOut;
 
             stockDataProcess.data.push({
-              items: [
-                { key: "ITEM CATEGORY", value: newItemCategory, process: "value" },
-                { key: "ITEM CODE", value: newItemCode, process: "value" },
-                { key: "ITEM NAME", value: newItemName, process: "value" },
-                { key: "IN", value: initialIn.toString(), process: "value" },
-                { key: "OUT", value: initialOut.toString(), process: "value" },
-                { key: "STOCK", value: initialStock.toString(), process: "value" },
-              ],
+              items: buildStockDataItems({
+                itemCategory: newItemCategory,
+                itemCode: newItemCode,
+                itemName: newItemName,
+                inn: initialIn,
+                out: initialOut,
+              }),
               rowDataId: row.rowDataId || rowId,
             });
           }
@@ -2932,6 +2899,9 @@ exports.handleUpdateIntersection = async (
       stockDataProcess.markModified("data");
       stockDataProcess.updatedBy = userId;
       await stockDataProcess.save();
+    } else if (process.processId === "ST/R/006") {
+      // Direct Stock Data edit — recompute STOCK / FOLLOW UP from qty fields
+      recalculateStockDataItems(items);
     } else {
       return { success: true };
     }
@@ -3196,22 +3166,21 @@ exports.handleDeleteIntersection = async (
           }
 
           if (stockRow) {
-            let inItem = stockRow.items.find((i) => i.key.trim() === "IN");
-            let outItem = stockRow.items.find((i) => i.key.trim() === "OUT");
-            let stockItem = stockRow.items.find((i) => i.key.trim() === "STOCK");
+            const inItem = ensureStockItem(stockRow.items, "IN");
+            const outItem = ensureStockItem(stockRow.items, "OUT");
 
-            let currentIn = parseFloat(inItem?.value || 0) || 0;
-            let currentOut = parseFloat(outItem?.value || 0) || 0;
+            let currentIn = parseFloat(inItem.value || 0) || 0;
+            let currentOut = parseFloat(outItem.value || 0) || 0;
 
             if (inOut === "IN") {
               currentIn -= qty;
-              if (inItem) inItem.value = currentIn.toString();
+              inItem.value = currentIn.toString();
             } else if (inOut === "OUT") {
               currentOut -= qty;
-              if (outItem) outItem.value = currentOut.toString();
+              outItem.value = currentOut.toString();
             }
 
-            if (stockItem) stockItem.value = (currentIn - currentOut).toString();
+            recalculateStockDataItems(stockRow.items);
 
             stockDataProcess.markModified("data");
             stockDataProcess.updatedBy = userId;
