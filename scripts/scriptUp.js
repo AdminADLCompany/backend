@@ -18,6 +18,7 @@ require("dotenv").config({
 const Process = require("../models/process");
 const SerialNumber = require("../models/serialNumber");
 const SubCategory = require("../models/subCategory");
+const Department = require("../models/department");
 const {
   prefixForType,
   DEFAULT_PAD_LENGTH,
@@ -110,6 +111,52 @@ const HEADER_UPDATES = [
         afterHeader: "STOCK",
         processType: "value",
       },
+    ],
+  },
+  {
+    processId: "HR/R/001",
+    description: "Employee History — STATUS (ACTIVE / INACTIVE dropdown) after DATE OF RELELIVING",
+    headers: [
+      { headerName: "STATUS", afterHeader: "DATE OF RELELIVING", processType: "select" },
+    ],
+  },
+  {
+    processId: "HR/R/002",
+    description:
+      "Attendance Register — DATE / DEPARTMENT / TOTAL EMPLOYEES / PRESENT (daily per-department totals)",
+    headers: [
+      { headerName: "DATE", index: 0, processType: "date" },
+      { headerName: "DEPARTMENT", afterHeader: "DATE", processType: "select" },
+      { headerName: "TOTAL EMPLOYEES", afterHeader: "DEPARTMENT", processType: "number" },
+      { headerName: "PRESENT", afterHeader: "TOTAL EMPLOYEES", processType: "number" },
+    ],
+  },
+  {
+    processId: "HR/R/007",
+    description: "5s — 5S (1S–5S) / DATE / score 0–5 per department",
+    headers: [
+      { headerName: "5S", index: 0, processType: "select" },
+      { headerName: "DATE", afterHeader: "5S", processType: "date" },
+      { headerName: "DESIGN", afterHeader: "DATE", processType: "number" },
+      { headerName: "MANUFACTURING", afterHeader: "DESIGN", processType: "number" },
+      { headerName: "QUALITY", afterHeader: "MANUFACTURING", processType: "number" },
+      { headerName: "PURCHASE", afterHeader: "QUALITY", processType: "number" },
+      { headerName: "SALES", afterHeader: "PURCHASE", processType: "number" },
+      { headerName: "STORES", afterHeader: "SALES", processType: "number" },
+      { headerName: "HR", afterHeader: "STORES", processType: "number" },
+      { headerName: "MAINTENANCE", afterHeader: "HR", processType: "number" },
+    ],
+  },
+  {
+    processId: "HR/R/008",
+    description:
+      "Safety Follow Ups — DATE / PPE FOLLOWS / NEAR MISS / IMPROVEMENTS / REMARK (only the missing ones are added)",
+    headers: [
+      { headerName: "DATE", index: 0, processType: "date" },
+      { headerName: "PPE FOLLOWS", afterHeader: "DATE", processType: "number" },
+      { headerName: "NEAR MISS", afterHeader: "PPE FOLLOWS", processType: "number" },
+      { headerName: "IMPROVEMENTS", afterHeader: "NEAR MISS", processType: "number" },
+      { headerName: "REMARK", afterHeader: "IMPROVEMENTS", processType: "value" },
     ],
   },
   {
@@ -464,6 +511,70 @@ function migrateProcurementSubPartName(procurement, productsProcess, bomProcess)
   return { changed, headerChanged, filled, unmatched, removedCells };
 }
 
+/**
+ * Overhead (HR/R/010): standard headcount per department for a FROM–TO period.
+ * Created once under the Human Resources department (and listed in its process menu).
+ */
+const OVERHEAD_PROCESS_ID = "HR/R/010";
+const OVERHEAD_NAME = "Overhead";
+const OVERHEAD_HEADERS = [
+  "FROM", "TO", "DESIGN", "MANUFACTURING", "QUALITY", "PURCHASE", "SALES", "STORES", "HR",
+  "MAINTENANCE", "ADMIN",
+];
+
+async function ensureOverheadProcess() {
+  console.log(`\n→ ${OVERHEAD_PROCESS_ID} ${OVERHEAD_NAME} — create process if missing`);
+  const hrDepartment = await Department.findOne({ name: /^human resources$/i });
+  if (!hrDepartment) {
+    console.warn("⚠  Human Resources department not found — skip");
+    return;
+  }
+  const existing = await Process.findOne({ processId: OVERHEAD_PROCESS_ID });
+  if (existing) {
+    console.log("  already exists");
+  } else {
+    // Reuse the owner of another HR process for updatedBy (optional field)
+    const sibling = await Process.findOne({ department: hrDepartment._id }).lean();
+    await Process.create({
+      process: OVERHEAD_NAME,
+      processId: OVERHEAD_PROCESS_ID,
+      headers: OVERHEAD_HEADERS,
+      department: hrDepartment._id,
+      data: [],
+      ...(sibling?.updatedBy ? { updatedBy: sibling.updatedBy } : {}),
+    });
+    console.log(`  created with headers [${OVERHEAD_HEADERS.join(", ")}]`);
+  }
+  if (!(hrDepartment.process || []).includes(OVERHEAD_NAME)) {
+    hrDepartment.process = [...(hrDepartment.process || []), OVERHEAD_NAME];
+    await hrDepartment.save();
+    console.log(`  added "${OVERHEAD_NAME}" to the Human Resources process list`);
+  }
+}
+
+/** Employee History: fill empty STATUS — INACTIVE when a relieving date is set, else ACTIVE. */
+async function backfillEmployeeStatus() {
+  const employees = await Process.findOne({ processId: "HR/R/001" });
+  if (!employees) return;
+  console.log("\n→ HR/R/001 Employee History — backfill empty STATUS");
+  const isRelieving = (k) =>
+    ["DATE OF RELELIVING", "DATE OF RELIEVING"].includes(String(k || "").trim().toUpperCase());
+  let filled = 0;
+  for (const row of employees.data || []) {
+    const statusItem = (row.items || []).find((i) => String(i.key).trim().toUpperCase() === "STATUS");
+    if (!statusItem || String(statusItem.value ?? "").trim() !== "") continue;
+    const relieved = (row.items || []).find((i) => isRelieving(i.key));
+    statusItem.value = String(relieved?.value ?? "").trim() ? "INACTIVE" : "ACTIVE";
+    statusItem.process = "select";
+    filled += 1;
+  }
+  if (filled) {
+    employees.markModified("data");
+    await employees.save();
+  }
+  console.log(filled ? `  set STATUS on ${filled} employee(s)` : "  nothing to fill");
+}
+
 async function main() {
   if (!dbUri) {
     throw new Error("DB_LOCAL_URI is not set in config/config.env");
@@ -476,6 +587,8 @@ async function main() {
 
   console.log(`Connecting to ${dbUri.replace(/\/\/.*@/, "//***@")} …`);
   await mongoose.connect(dbUri, { family: 4 });
+
+  await ensureOverheadProcess();
 
   let totalApplied = 0;
   let totalSkipped = 0;
@@ -521,6 +634,8 @@ async function main() {
   console.log(
     `\nDone inserts. Applied ${totalApplied} header(s), skipped ${totalSkipped}.`,
   );
+
+  await backfillEmployeeStatus();
 
   // Stock Data formula backfill (idempotent — safe after header insert or re-run)
   {

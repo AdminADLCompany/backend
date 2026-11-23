@@ -3102,6 +3102,213 @@ exports.getQualityDepartmentDashboard = catchAsyncErrors(async (req, res, next) 
   });
 });
 
+// HR Department Dashboard (single call for the whole HR dashboard)
+// GET /hr/dashboard?department=&groupBy=day|month|year&startDate=&endDate=&safetyMonth=YYYY-MM
+//                  &fiveSYear=YYYY&fiveSMonth=1-12
+const HR_DEPARTMENTS = [
+  "DESIGN", "MANUFACTURING", "QUALITY", "PURCHASE", "SALES", "STORES", "HR", "MAINTENANCE", "ADMIN",
+];
+// Employee History uses older names for some departments
+const HR_DEPT_ALIASES = {
+  PRODUCTION: "MANUFACTURING",
+  FINANCE: "ADMIN",
+  "HUMAN RESOURCES": "HR",
+  STORE: "STORES",
+  MAINTAINANCE: "MAINTENANCE",
+};
+const hrDept = (value) => {
+  const v = String(value ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+  return HR_DEPT_ALIASES[v] || v;
+};
+
+exports.getHrDepartmentDashboard = catchAsyncErrors(async (req, res, next) => {
+  const department = hrDept(req.query.department);
+  const deptFilter = HR_DEPARTMENTS.includes(department) ? department : "";
+  // Attendance has its own department filter (falls back to `department`)
+  const attendanceDept =
+    req.query.attendanceDepartment !== undefined ? hrDept(req.query.attendanceDepartment) : department;
+  const attDeptFilter = HR_DEPARTMENTS.includes(attendanceDept) ? attendanceDept : "";
+  const groupBy = ["day", "month", "year"].includes(req.query.groupBy) ? req.query.groupBy : "month";
+  const startDate = toEpoch(req.query.startDate);
+  const endDate = toEpoch(req.query.endDate);
+  const now = new Date();
+  const today = startOfDay(now.getTime());
+
+  const ids = ["HR/R/001", "HR/R/002", "HR/R/007", "HR/R/008", "HR/R/010"];
+  const processes = await Process.find({ processId: { $in: ids } })
+    .select("processId data")
+    .lean();
+  const byId = Object.fromEntries(processes.map((p) => [p.processId, p]));
+  const rowsOf = (id) => byId[id]?.data || [];
+  const num = (v) => {
+    const n = parseFloat(String(v ?? "").replace("%", ""));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // 1. Employee strength: active employees (STATUS not INACTIVE and no relieving date)
+  const employees = rowsOf("HR/R/001").map((row) => {
+    const status = String(designVal(row.items, ["STATUS"]) || "").trim().toUpperCase();
+    const relieved = String(designVal(row.items, ["DATE OF RELELIVING", "DATE OF RELIEVING"]) || "").trim();
+    return {
+      dept: hrDept(designVal(row.items, ["DEPARTMENT"])),
+      active: status ? status !== "INACTIVE" : relieved === "",
+    };
+  });
+  const activeByDept = {};
+  employees.forEach((e) => {
+    if (e.active) activeByDept[e.dept || "NOT ASSIGNED"] = (activeByDept[e.dept || "NOT ASSIGNED"] || 0) + 1;
+  });
+  const employeeCount = deptFilter
+    ? activeByDept[deptFilter] || 0
+    : Object.values(activeByDept).reduce((s, n) => s + n, 0);
+
+  // Standard overhead: the Overhead row whose FROM–TO covers today (latest FROM wins);
+  // if none covers today, the latest row that has already started.
+  const overheadRows = rowsOf("HR/R/010")
+    .map((row) => ({
+      from: toEpoch(designVal(row.items, ["FROM"])),
+      to: toEpoch(designVal(row.items, ["TO"])),
+      values: Object.fromEntries(HR_DEPARTMENTS.map((d) => [d, num(designVal(row.items, [d])) || 0])),
+    }))
+    .filter((r) => r.from !== null);
+  const covering = overheadRows
+    .filter((r) => r.from <= now.getTime() && (r.to === null || r.to + DAY_MS > now.getTime()))
+    .sort((a, b) => b.from - a.from)[0];
+  const started = overheadRows.filter((r) => r.from <= now.getTime()).sort((a, b) => b.from - a.from)[0];
+  const overhead = covering || started || null;
+  const standardOverhead = overhead
+    ? deptFilter
+      ? overhead.values[deptFilter] || 0
+      : Object.values(overhead.values).reduce((s, n) => s + n, 0)
+    : null;
+
+  // 2. Attendance trend (Attendance Register: DATE, DEPARTMENT, TOTAL EMPLOYEES, PRESENT)
+  const attBuckets = new Map();
+  let attTotal = 0;
+  let attPresent = 0;
+  rowsOf("HR/R/002").forEach((row) => {
+    const date = toEpoch(designVal(row.items, ["DATE"]));
+    if (date === null) return;
+    if (startDate !== null && date < startDate) return;
+    if (endDate !== null && date > endDate) return;
+    if (attDeptFilter && hrDept(designVal(row.items, ["DEPARTMENT"])) !== attDeptFilter) return;
+    const total = num(designVal(row.items, ["TOTAL EMPLOYEES"])) || 0;
+    const present = Math.min(num(designVal(row.items, ["PRESENT"])) || 0, total || Infinity);
+    const { key, label } = periodOf(date, groupBy);
+    const b = attBuckets.get(key) || { key, period: label, total: 0, present: 0 };
+    b.total += total;
+    b.present += present;
+    attBuckets.set(key, b);
+    attTotal += total;
+    attPresent += present;
+  });
+  const attendanceTrend = [...attBuckets.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((b) => ({ ...b, rate: b.total ? Number(((b.present / b.total) * 100).toFixed(1)) : null }));
+
+  // 3. Safety calendar for one month (Safety Follow Ups: DATE, PPE FOLLOWS, NEAR MISS, IMPROVEMENTS, REMARK)
+  const [sy, sm] = String(req.query.safetyMonth || "").split("-").map(Number);
+  const safetyYear = sy && sm ? sy : now.getFullYear();
+  const safetyMonthIdx = sy && sm ? sm - 1 : now.getMonth();
+  const daysInMonth = new Date(safetyYear, safetyMonthIdx + 1, 0).getDate();
+  const dayMap = new Map();
+  const safetyMonths = new Set();
+  rowsOf("HR/R/008").forEach((row) => {
+    const date = toEpoch(designVal(row.items, ["DATE"]));
+    if (date === null) return;
+    const d = new Date(date);
+    safetyMonths.add(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+    if (d.getFullYear() !== safetyYear || d.getMonth() !== safetyMonthIdx) return;
+    const day = d.getDate();
+    const entry = dayMap.get(day) || { ppe: null, nearMiss: 0, improvements: 0, remarks: [] };
+    const ppe = num(designVal(row.items, ["PPE FOLLOWS"]));
+    if (ppe !== null) entry.ppe = entry.ppe === null ? ppe : Math.min(entry.ppe, ppe); // worst of the day
+    entry.nearMiss += num(designVal(row.items, ["NEAR MISS"])) || 0;
+    entry.improvements += num(designVal(row.items, ["IMPROVEMENTS"])) || 0;
+    const remark = String(designVal(row.items, ["REMARK", "REMARKS"]) || "").trim();
+    if (remark) entry.remarks.push(remark);
+    dayMap.set(day, entry);
+  });
+  const safetyDays = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const e = dayMap.get(day);
+    if (!e) return { day, status: "none" };
+    const status = e.nearMiss > 0 ? "nearMiss" : e.ppe === null || e.ppe < 100 ? "ppe" : "safe";
+    return { day, status, ppe: e.ppe, nearMiss: e.nearMiss, improvements: e.improvements, remark: e.remarks.join("; ") };
+  });
+  const recordedDays = safetyDays.filter((d) => d.status !== "none").length;
+  const safeDays = safetyDays.filter((d) => d.status === "safe").length;
+  safetyMonths.add(`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`);
+
+  // 4. 5S scores (5s: 5S, DATE, one 0–5 rating per department) — average per department, target 5
+  const fiveSYear = Number(req.query.fiveSYear) || null;
+  const fiveSMonth = Number(req.query.fiveSMonth) || null;
+  const FIVE_S_TARGET = 5;
+  const scoreSums = {};
+  const scoreCounts = {};
+  const fiveSYears = new Set();
+  rowsOf("HR/R/007").forEach((row) => {
+    const date = toEpoch(designVal(row.items, ["DATE"]));
+    if (date !== null) fiveSYears.add(new Date(date).getFullYear());
+    if (fiveSYear || fiveSMonth) {
+      if (date === null) return;
+      const d = new Date(date);
+      if (fiveSYear && d.getFullYear() !== fiveSYear) return;
+      if (fiveSMonth && d.getMonth() + 1 !== fiveSMonth) return;
+    }
+    HR_DEPARTMENTS.forEach((dept) => {
+      const v = num(designVal(row.items, [dept]));
+      if (v === null) return;
+      scoreSums[dept] = (scoreSums[dept] || 0) + v;
+      scoreCounts[dept] = (scoreCounts[dept] || 0) + 1;
+    });
+  });
+  const fiveS = HR_DEPARTMENTS.filter((d) => scoreCounts[d]).map((dept) => ({
+    department: dept,
+    score: Number((scoreSums[dept] / scoreCounts[dept]).toFixed(2)),
+    target: FIVE_S_TARGET,
+  }));
+  const fiveSAvg = fiveS.length ? fiveS.reduce((s, r) => s + r.score, 0) / fiveS.length : null;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      departments: HR_DEPARTMENTS,
+      department: deptFilter,
+      employeeStrength: {
+        employeeCount,
+        standardOverhead,
+        overheadPeriod: overhead ? { from: overhead.from, to: overhead.to } : null,
+        byDepartment: activeByDept,
+      },
+      attendance: {
+        department: attDeptFilter,
+        groupBy,
+        rate: attTotal ? Number(((attPresent / attTotal) * 100).toFixed(1)) : null,
+        present: attPresent,
+        total: attTotal,
+        trend: attendanceTrend,
+      },
+      safety: {
+        month: `${safetyYear}-${pad2(safetyMonthIdx + 1)}`,
+        months: [...safetyMonths].sort().reverse(),
+        days: safetyDays,
+        recordedDays,
+        safeDays,
+        safePct: recordedDays ? Number(((safeDays / recordedDays) * 100).toFixed(1)) : null,
+      },
+      fiveS: {
+        target: FIVE_S_TARGET,
+        data: fiveS,
+        averageScore: fiveSAvg === null ? null : Number(fiveSAvg.toFixed(2)),
+        pct: fiveSAvg === null ? null : Number(((fiveSAvg / FIVE_S_TARGET) * 100).toFixed(1)),
+        years: [...fiveSYears].sort((a, b) => b - a),
+        filter: { year: fiveSYear, month: fiveSMonth },
+      },
+    },
+  });
+});
+
 // Store Department Dashboard
 const stockRowView = (row) => {
   const items = row.items || [];
@@ -3679,8 +3886,16 @@ exports.getEmployeeOverheadDashboard = catchAsyncErrors(
       });
     }
 
-    // Actual OverHead = Count of active employees (no relieving date)
-    const activeEmployees = employees.filter((row) => relievingOf(row) === "");
+    // Active = STATUS is not INACTIVE (when STATUS is filled), otherwise no relieving date
+    const isActive = (row) => {
+      const status = String(row.items.find((i) => String(i.key || "").trim().toUpperCase() === "STATUS")?.value || "")
+        .trim()
+        .toUpperCase();
+      return status ? status !== "INACTIVE" : relievingOf(row) === "";
+    };
+
+    // Actual OverHead = Count of active employees
+    const activeEmployees = employees.filter(isActive);
 
     // 12-month retention: of the people on staff 12 months ago, how many are still with us.
     // On staff 12 months ago = joined on/before that date and not relieved before it.
@@ -3696,7 +3911,7 @@ exports.getEmployeeOverheadDashboard = catchAsyncErrors(
       // Relieving date that is not a valid date: treat as left (cannot place it in time)
       return Number.isFinite(relievedEpoch) && relievedEpoch > yearAgoEpoch;
     });
-    const stillHere = onStaffYearAgo.filter((row) => relievingOf(row) === "");
+    const stillHere = onStaffYearAgo.filter(isActive);
     const retentionRate = onStaffYearAgo.length
       ? Number(((stillHere.length / onStaffYearAgo.length) * 100).toFixed(1))
       : null;
