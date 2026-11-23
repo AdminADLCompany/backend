@@ -461,9 +461,9 @@ exports.handleAddIntersection = async (process, items, rowDataId, userId) => {
               { key: "DATE", value: date, process: "date" },
               { key: "PL NO", value: planNo },
               { key: "PART NO", value: partNo },
-              { key: "PART NAME", value: partName },
+              // Sub part comes from the BOM row (DD/R/002 SUB PARTS) of this product
+              { key: "SUB PART NAME", value: b["SUB PARTS"] || "" },
               { key: "TYPE", value: type },
-              { key: "MATERIAL", value: material },
               {
                 key: "ITEM CATEGORY",
                 value:
@@ -1916,9 +1916,9 @@ exports.handleUpdateIntersection = async (
               { key: "DATE", value: date, process: "date" },
               { key: "PL NO", value: planNo },
               { key: "PART NO", value: partNo?.value || "" },
-              { key: "PART NAME", value: partName?.value || "" },
+              // Sub part comes from the BOM row (DD/R/002 SUB PARTS) of this product
+              { key: "SUB PART NAME", value: b["SUB PARTS"] || "" },
               { key: "TYPE", value: type },
-              { key: "MATERIAL", value: material },
               {
                 key: "ITEM CATEGORY",
                 value:

@@ -1214,46 +1214,45 @@ exports.getDashboardProductionPlan = catchAsyncErrors(
     if (!productionPlanProcess)
       return res.status(200).json({ success: true, data: {} });
 
-    const pendingDetails = productionPlanProcess.data.filter((row) => {
-      return (
-        row.items.find((item) => item.key === "RM")?.value?.toLowerCase() !==
-          "completed" &&
-        row.items
-          .find((item) => item.key === "INCOMING INSPECTION")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "MACHINE")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "ASSEMBLY")
-          ?.value?.toLowerCase() !== "completed" &&
-        row.items
-          .find((item) => item.key === "OUT PROCESS")
-          ?.value?.toLowerCase() !== "completed"
-      );
-    });
+    // A plan is pending until EVERY stage is completed (any stage not completed → pending)
+    const PLAN_STAGES = ["RM", "INCOMING INSPECTION", "MACHINE", "ASSEMBLY", "OUT PROCESS"];
+    const isStageCompleted = (row, stage) =>
+      String(row.items.find((item) => item.key === stage)?.value || "")
+        .trim()
+        .toLowerCase() === "completed";
+    const pendingDetails = productionPlanProcess.data.filter(
+      (row) => !PLAN_STAGES.every((stage) => isStageCompleted(row, stage)),
+    );
 
-    const reportGraph = [];
+    const planQtyOf = (row) =>
+      Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
+
+    // One bar per part number: PLAN QTY summed across all plans for that part
+    const byPart = new Map();
     productionPlanProcess.data.forEach((row) => {
       const partNo =
-        row.items.find((item) => item.key === "PART-NO")?.value || "N/A";
-      const planQty =
-        Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0;
-      reportGraph.push({ partNo, planQty });
+        String(row.items.find((item) => item.key === "PART-NO")?.value || "").trim() || "N/A";
+      byPart.set(partNo, (byPart.get(partNo) || 0) + planQtyOf(row));
     });
+    const reportGraph = [...byPart.entries()].map(([partNo, planQty]) => ({
+      partNo,
+      planQty,
+    }));
 
-    const totalPlanQty = productionPlanProcess.data.reduce((acc, row) => {
-      return (
-        acc +
-        (Number(row.items.find((item) => item.key === "PLAN QTY")?.value) || 0)
-      );
-    }, 0);
+    const totalPlanQty = productionPlanProcess.data.reduce(
+      (acc, row) => acc + planQtyOf(row),
+      0,
+    );
+    const pendingPlanQty = pendingDetails.reduce(
+      (acc, row) => acc + planQtyOf(row),
+      0,
+    );
 
     res
       .status(200)
       .json({
         success: true,
-        data: { pendingDetails, reportGraph, totalPlanQty },
+        data: { pendingDetails, reportGraph, totalPlanQty, pendingPlanQty },
       });
   },
 );
@@ -1641,9 +1640,12 @@ exports.getDashboardOrderList = catchAsyncErrors(async (req, res, next) => {
         data: { totalFiltered: 0, data: [], totalOrderQty: 0 },
       });
 
+  // Order List keeps its status in "ORDER STATUS" (older data may use "STATUS")
   const filteredOrder = orderListProcess.data.filter((row) => {
-    const status = row.items.find((item) => item.key === "STATUS")?.value;
-    return status?.toLowerCase() !== "closed";
+    const status =
+      row.items.find((item) => item.key === "ORDER STATUS")?.value ??
+      row.items.find((item) => item.key === "STATUS")?.value;
+    return String(status || "").trim().toLowerCase() !== "closed";
   });
 
   const totalOrderQty = filteredOrder.reduce(
@@ -1781,12 +1783,22 @@ exports.getMainNPDRegisterDashboard = catchAsyncErrors(
               items.find((i) => i.key === "MASTER PIECE") ||
               items.find((i) => i.key === "MASTER")
             )?.process || "",
+          // Days left to TARGET DATE; without a target, how long since the enquiry DATE
           due: (() => {
-            const epoch = Number(
-              items.find((i) => i.key === "TARGET DATE")?.value,
-            );
-            if (!epoch) return null;
-            return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+            const target = toEpoch(items.find((i) => i.key === "TARGET DATE")?.value);
+            const enquiry = toEpoch(items.find((i) => i.key === "DATE")?.value);
+            const plural = (n) => (Math.abs(n) === 1 ? "" : "s");
+            const today = startOfDay(Date.now());
+            if (target !== null) {
+              const d = Math.round((startOfDay(target) - today) / DAY_MS);
+              if (d === 0) return "Due today";
+              return d > 0 ? `${d} day${plural(d)} left` : `${-d} day${plural(d)} overdue`;
+            }
+            if (enquiry !== null) {
+              const d = Math.max(0, Math.round((today - startOfDay(enquiry)) / DAY_MS));
+              return `Open ${d} day${plural(d)}`;
+            }
+            return null;
           })(),
         };
       });
@@ -1850,10 +1862,12 @@ exports.getMainRevisionControlDashboard = catchAsyncErrors(
           date: items.find((i) => i.key === "DATE")?.value || "",
           part: items.find((i) => i.key === "PART NO")?.value || "",
           status: items.find((i) => i.key === "REVISION STATUS")?.value || "",
+          // How long the revision has been open: today − entered DATE
           due: (() => {
-            const epoch = Number(items.find((i) => i.key === "DATE")?.value);
-            if (!epoch) return null;
-            return `${Math.ceil((epoch - Date.now()) / (1000 * 60 * 60 * 24))} days`;
+            const epoch = toEpoch(items.find((i) => i.key === "DATE")?.value);
+            if (epoch === null) return null;
+            const days = Math.max(0, Math.round((startOfDay(Date.now()) - startOfDay(epoch)) / DAY_MS));
+            return `${days} day${days === 1 ? "" : "s"} open`;
           })(),
         };
       });
@@ -2077,44 +2091,77 @@ exports.getCalibrationDueDashboard = catchAsyncErrors(
       );
     }
 
-    const filteredCalibration = calibrationProcess.data.filter((row) => {
-      const certificate = row.items.find(
-        (item) => item.key === "CERTIFICATE",
-      )?.value;
-      const date =
-        row.items.find((item) => item.key === "DATE")?.value ||
-        row.items.find((item) => item.key === "DUE")?.value; // Supporting both DATE and DUE keys
-
-      return (
-        certificate === "" ||
-        certificate === null ||
-        (date && Number(date) <= Date.now() - 10 * 24 * 60 * 60 * 1000)
-      );
-    });
-
-    const doneCount = filteredCalibration.filter((row) => {
-      const status = row.items.find((item) => item.key === "DONE")?.value;
-      return status?.toString().toLowerCase() !== "";
-    }).length;
-
+    // An instrument needs attention when its calibration is overdue, due within
+    // the next 10 days, or it has no calibration certificate uploaded.
+    const DUE_SOON_DAYS = 10;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayEpoch = today.getTime();
+    const dueSoonLimit = todayEpoch + (DUE_SOON_DAYS + 1) * 24 * 60 * 60 * 1000 - 1;
 
-    const dueCount = filteredCalibration.filter((row) => {
-      const dueValue = row.items.find((item) => item.key === "DUE")?.value;
-      if (!dueValue) return false;
+    const classify = (row) => {
+      const certificate = row.items.find((item) => item.key === "CERTIFICATE")?.value;
+      const dueValue =
+        row.items.find((item) => item.key === "DUE")?.value ||
+        row.items.find((item) => item.key === "DATE")?.value;
       const dueEpoch = Number(dueValue);
-      return !isNaN(dueEpoch) && dueEpoch > todayEpoch;
+      const hasDue = dueValue !== undefined && dueValue !== "" && !isNaN(dueEpoch) && dueEpoch > 0;
+      return {
+        noCertificate: certificate === undefined || certificate === null || String(certificate).trim() === "",
+        overdue: hasDue && dueEpoch < todayEpoch,
+        dueSoon: hasDue && dueEpoch >= todayEpoch && dueEpoch <= dueSoonLimit,
+        dueEpoch: hasDue ? dueEpoch : null,
+      };
+    };
+
+    const flagged = calibrationProcess.data
+      .map((row) => ({ row, flags: classify(row) }))
+      .filter(({ flags }) => flags.overdue || flags.dueSoon || flags.noCertificate)
+      // Most urgent first: overdue, then due soonest; rows with no due date last
+      .sort((a, b) => (a.flags.dueEpoch ?? Infinity) - (b.flags.dueEpoch ?? Infinity));
+
+    const overdueCount = flagged.filter(({ flags }) => flags.overdue).length;
+    const dueSoonCount = flagged.filter(({ flags }) => flags.dueSoon).length;
+    const noCertificateCount = flagged.filter(({ flags }) => flags.noCertificate).length;
+
+    // Instrument name/number live on the parent Instrument & Calibration row (QA/R/002)
+    const instrumentsProcess = await Process.findOne({ processId: "QA/R/002" }).lean();
+    const instrumentRows = instrumentsProcess?.data || [];
+    const instrumentById = new Map(instrumentRows.map((r) => [String(r._id), r]));
+    const valueOf = (items, key) => items?.find((i) => i.key === key)?.value || "";
+    const calibratedIds = new Set(
+      calibrationProcess.data.map((r) => (r.rowDataId ? String(r.rowDataId) : null)).filter(Boolean),
+    );
+    // Active instruments that have no calibration record at all yet
+    const notRecordedCount = instrumentRows.filter((r) => {
+      const status = String(valueOf(r.items, "CR-STATUS")).trim().toUpperCase();
+      return status !== "INACTIVE" && !calibratedIds.has(String(r._id));
     }).length;
+
+    const openRecords = flagged.map(({ row, flags }) => {
+      const plain = typeof row.toObject === "function" ? row.toObject() : row;
+      const parent = row.rowDataId ? instrumentById.get(String(row.rowDataId)) : null;
+      const name = valueOf(parent?.items, "INSTRUMENT NAME");
+      const no = valueOf(parent?.items, "INSTRUMENT NO");
+      return {
+        ...plain,
+        instrumentName: [no, name].filter(Boolean).join(" · ") || "",
+        overdue: flags.overdue,
+        dueSoon: flags.dueSoon,
+        noCertificate: flags.noCertificate,
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: {
-        totalFiltered: filteredCalibration.length,
-        doneCount,
-        dueCount,
-        openRecords: filteredCalibration,
+        totalFiltered: flagged.length,
+        overdueCount,
+        dueSoonCount,
+        noCertificateCount,
+        notRecordedCount,
+        dueSoonDays: DUE_SOON_DAYS,
+        openRecords,
       },
     });
   },
@@ -2166,7 +2213,28 @@ exports.getCertificateRenewalDashboard = catchAsyncErrors(
       );
     }
 
-    const { startDate, endDate } = req.query;
+    // Renewal history lives in Certificate Renewal Details (QA/R/011A), linked by rowDataId
+    const detailsProcess = await Process.findOne({ processId: "QA/R/011A" }).lean();
+    const keyOf = (k) => String(k || "").trim().toUpperCase();
+    const epochOf = (items, keys) => {
+      const hit = (items || []).find((i) => keys.includes(keyOf(i.key)));
+      const n = Number(hit?.value);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const EXPIRY_KEYS = ["EXPIRY DATE", "EXPIRY", "VALID TILL", "VALID UPTO", "DUE DATE", "DUE"];
+    const RENEWAL_KEYS = ["NEXT RENEVAL", "NEXT RENEWAL"];
+    // Latest expiry per certificate (the most recent renewal decides the current validity)
+    const latestExpiryByCert = new Map();
+    for (const d of detailsProcess?.data || []) {
+      const certId = d.rowDataId ? String(d.rowDataId) : null;
+      if (!certId) continue;
+      const expiry = epochOf(d.items, EXPIRY_KEYS) ?? epochOf(d.items, RENEWAL_KEYS);
+      if (expiry === null) continue;
+      if (!latestExpiryByCert.has(certId) || expiry > latestExpiryByCert.get(certId)) {
+        latestExpiryByCert.set(certId, expiry);
+      }
+    }
+
     let filteredData = certificateProcess.data;
 
     const results = filteredData.map((row) => {
@@ -2174,20 +2242,17 @@ exports.getCertificateRenewalDashboard = catchAsyncErrors(
       const certName =
         items.find((i) => i.key === "CERTIFICATE NAME")?.value || "N/A";
       const certNo =
-        items.find((i) => i.key === "CERTIFICATE NO ")?.value || "N/A";
+        items.find((i) => keyOf(i.key) === "CERTIFICATE NO")?.value || "N/A";
       const department =
         items.find((i) => i.key === "DEPARTMENT")?.value || "N/A";
       const status = items.find((i) => i.key === "CRS-STATUS")?.value || "N/A";
 
-      // Attempt to find any date fields for due calculation
-      const dateItem = items.find(
-        (i) =>
-          i.key.toLowerCase().includes("date") ||
-          i.key.toLowerCase().includes("expiry") ||
-          i.key.toLowerCase().includes("due"),
-      );
-
-      const epoch = dateItem ? Number(dateItem.value) : null;
+      // Expiry: latest renewal record first; otherwise an expiry/due column on the certificate
+      // itself (an issue date is never used as the due date).
+      const epoch =
+        latestExpiryByCert.get(String(row._id)) ??
+        epochOf(items, EXPIRY_KEYS) ??
+        epochOf(items, RENEWAL_KEYS);
       let reminder = "No date set";
       let isDue = false;
 
@@ -2219,6 +2284,9 @@ exports.getCertificateRenewalDashboard = catchAsyncErrors(
         isDue,
       };
     });
+
+    // Most urgent first (overdue → expiring soonest); certificates with no date go last
+    results.sort((a, b) => (a.dueDate ?? Infinity) - (b.dueDate ?? Infinity));
 
     res.status(200).json({
       success: true,
@@ -2365,6 +2433,321 @@ exports.getRevisionControlDashboard = catchAsyncErrors(
     });
   },
 );
+
+// Design Department Dashboard (single call for the whole Design dashboard)
+// GET /design/dashboard
+const DAY_MS = 24 * 60 * 60 * 1000;
+const normKey = (k) => String(k || "").replace(/\s+/g, " ").trim().toUpperCase();
+const designVal = (items = [], keys = []) => {
+  const wanted = keys.map(normKey);
+  const hit = items.find((i) => wanted.includes(normKey(i.key)));
+  const v = hit?.value;
+  return Array.isArray(v) ? v.join(", ") : typeof v === "string" ? v.trim() : v;
+};
+const designItem = (items = [], keys = []) => {
+  const wanted = keys.map(normKey);
+  return items.find((i) => wanted.includes(normKey(i.key)));
+};
+const toEpoch = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const startOfDay = (ms) => {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+const countDistinct = (rows = [], keys = []) => {
+  const set = new Set();
+  rows.forEach((row) => {
+    const v = designVal(row.items, keys);
+    if (v) set.add(String(v).toUpperCase());
+  });
+  return set.size;
+};
+
+exports.getDesignDashboard = catchAsyncErrors(async (req, res, next) => {
+  const ids = ["DD/R/001", "DD/R/002A", "DD/R/007", "DD/R/005", "DD/R/010"];
+  const processes = await Process.find({ processId: { $in: ids } })
+    .select("processId data")
+    .lean();
+  const byId = Object.fromEntries(processes.map((p) => [p.processId, p]));
+  const rowsOf = (id) => byId[id]?.data || [];
+  const today = startOfDay(Date.now());
+
+  // 1. Product counts
+  // Series + main products from Product List (DD/R/001); sub products from Products (DD/R/002A)
+  const productCounts = {
+    seriesCount: countDistinct(rowsOf("DD/R/001"), ["SERIES"]),
+    mainProductCount: countDistinct(rowsOf("DD/R/001"), ["PART NO", "PART-NO"]),
+    subProductCount: countDistinct(rowsOf("DD/R/002A"), ["PART NO", "PART-NO"]),
+  };
+
+  // 2. Product Success Rate (DD/R/007): average + lowest 5
+  const successRows = rowsOf("DD/R/007")
+    .filter((row) => String(designVal(row.items, ["STATUS"]) || "").toUpperCase() !== "CLOSED")
+    .map((row) => {
+      const items = row.items || [];
+      const sold = Number(designVal(items, ["QTY SOLD"])) || 0;
+      const returned = Number(designVal(items, ["QTY RETURNED"])) || 0;
+      let rate = null;
+      if (sold > 0) {
+        rate = ((sold - returned) / sold) * 100;
+      } else {
+        const stored = parseFloat(designVal(items, ["SUCCESS RATE"]));
+        // Older rows may store a fraction (0.97) instead of a percent (97)
+        if (Number.isFinite(stored)) rate = stored > 0 && stored <= 1 ? stored * 100 : stored;
+      }
+      return {
+        series: designVal(items, ["SERIES"]) || "-",
+        partNo: designVal(items, ["PART NO", "PART-NO"]) || "-",
+        partName: designVal(items, ["PART NAME", "PART-NAME"]) || "-",
+        qtySold: sold,
+        qtyReturned: returned,
+        successRate: rate === null ? null : Number(rate.toFixed(2)),
+      };
+    })
+    .filter((r) => r.successRate !== null);
+
+  const avgSuccessRate = successRows.length
+    ? Number(
+        (successRows.reduce((s, r) => s + r.successRate, 0) / successRows.length).toFixed(2),
+      )
+    : 0;
+  const lowest = [...successRows].sort((a, b) => a.successRate - b.successRate).slice(0, 5);
+
+  // 3. Revision Control (DD/R/005): rows IN REVISION, due = days open since entered DATE
+  const revisionRows = rowsOf("DD/R/005")
+    .filter((row) => {
+      const s = String(designVal(row.items, ["REVISION STATUS"]) || "")
+        .replace(/[\s_-]/g, "")
+        .toUpperCase();
+      return s === "INREVISION";
+    })
+    .map((row) => {
+      const items = row.items || [];
+      const entered = toEpoch(designVal(items, ["DATE"]));
+      const daysOpen = entered === null ? null : Math.max(0, Math.round((today - startOfDay(entered)) / DAY_MS));
+      return {
+        rowId: row._id,
+        partNo: designVal(items, ["PART NO", "PART-NO"]) || "-",
+        problemDescription: designVal(items, ["PROBLEM DESCRIPTION"]) || "-",
+        date: entered,
+        daysOpen,
+        due: daysOpen === null ? "-" : `${daysOpen} day${daysOpen === 1 ? "" : "s"} open`,
+      };
+    })
+    .sort((a, b) => (b.daysOpen ?? -1) - (a.daysOpen ?? -1));
+
+  // 4. NPD Register (DD/R/010): pending rows (any of PROTO / VALIDATION / MASTER not green)
+  // Due = days left to TARGET DATE; when there is no TARGET DATE, days since enquiry DATE.
+  const npdRows = rowsOf("DD/R/010")
+    .filter((row) => {
+      const items = row.items || [];
+      const proto = designItem(items, ["PROTO"])?.process;
+      const validation = designItem(items, ["VALIDATION"])?.process;
+      const master = designItem(items, ["MASTER PIECE", "MASTER"])?.process;
+      const status = String(designVal(items, ["NPD STATUS"]) || "").toUpperCase();
+      return (proto !== "green" || validation !== "green" || master !== "green") && status !== "NOT FEASIBLE";
+    })
+    .map((row) => {
+      const items = row.items || [];
+      const target = toEpoch(designVal(items, ["TARGET DATE"]));
+      const enquiry = toEpoch(designVal(items, ["DATE"]));
+      let dueDays = null;
+      let dueBasis = null;
+      let due = "-";
+      if (target !== null) {
+        dueDays = Math.round((startOfDay(target) - today) / DAY_MS);
+        dueBasis = "target";
+        due =
+          dueDays > 0
+            ? `${dueDays} day${dueDays === 1 ? "" : "s"} left`
+            : dueDays === 0
+              ? "Due today"
+              : `${Math.abs(dueDays)} day${dueDays === -1 ? "" : "s"} overdue`;
+      } else if (enquiry !== null) {
+        dueDays = Math.max(0, Math.round((today - startOfDay(enquiry)) / DAY_MS));
+        dueBasis = "enquiry";
+        due = `Open ${dueDays} day${dueDays === 1 ? "" : "s"}`;
+      }
+      return {
+        rowId: row._id,
+        no: designVal(items, ["NO"]) || "",
+        from: designVal(items, ["FROM"]) || "-",
+        enquiryDate: enquiry,
+        targetDate: target,
+        part: designVal(items, ["PART", "PART NAME"]) || "-",
+        npdStatus: designVal(items, ["NPD STATUS"]) || "",
+        proto: designItem(items, ["PROTO"])?.process || "",
+        validation: designItem(items, ["VALIDATION"])?.process || "",
+        master: designItem(items, ["MASTER PIECE", "MASTER"])?.process || "",
+        dueDays,
+        dueBasis,
+        due,
+      };
+    });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      productCounts,
+      productSuccess: {
+        totalRecords: successRows.length,
+        avgSuccessRate,
+        lowest,
+      },
+      revision: { count: revisionRows.length, rows: revisionRows },
+      npd: { count: npdRows.length, rows: npdRows },
+    },
+  });
+});
+
+// Sales Department Dashboard (single call for the whole Sales dashboard)
+// GET /sales/dashboard?groupBy=day|month|year&startDate=<epoch>&endDate=<epoch>&enqBy=<name>
+const dueInfo = (baseEpoch, days) => {
+  if (baseEpoch === null) return { dueDate: null, dueDays: null, due: "-" };
+  const dueDate = baseEpoch + (Number(days) || 0) * DAY_MS;
+  const dueDays = Math.round((startOfDay(dueDate) - startOfDay(Date.now())) / DAY_MS);
+  const plural = (n) => (Math.abs(n) === 1 ? "" : "s");
+  const due =
+    dueDays > 0
+      ? `${dueDays} day${plural(dueDays)} left`
+      : dueDays === 0
+        ? "Due today"
+        : `${Math.abs(dueDays)} day${plural(dueDays)} overdue`;
+  return { dueDate, dueDays, due };
+};
+const pad2 = (n) => String(n).padStart(2, "0");
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const periodOf = (epoch, groupBy) => {
+  const d = new Date(epoch);
+  if (groupBy === "year") return { key: `${d.getFullYear()}`, label: `${d.getFullYear()}` };
+  if (groupBy === "day")
+    return {
+      key: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+      label: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`,
+    };
+  return {
+    key: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`,
+    label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+  };
+};
+
+exports.getSalesDashboard = catchAsyncErrors(async (req, res, next) => {
+  const groupBy = ["day", "month", "year"].includes(req.query.groupBy)
+    ? req.query.groupBy
+    : "month";
+  const startDate = toEpoch(req.query.startDate);
+  const endDate = toEpoch(req.query.endDate);
+  const enqByFilter = String(req.query.enqBy || "").trim().toUpperCase();
+
+  const ids = ["MS/R/004", "MS/R/005", "MS/R/006", "MS/R/006A"];
+  const processes = await Process.find({ processId: { $in: ids } })
+    .select("processId data")
+    .lean();
+  const byId = Object.fromEntries(processes.map((p) => [p.processId, p]));
+  const rowsOf = (id) => byId[id]?.data || [];
+
+  // 1. Customer count (Customer List MS/R/004) — all customers
+  const customerCount = countDistinct(rowsOf("MS/R/004"), ["CUSTOMER NAME", "CUSTOMER-NAME"]);
+
+  // 2. Quotation status counts (Quotation List MS/R/005, QL STATUS)
+  const quotation = { waitingForOrder: 0, waitingForQuote: 0 };
+  rowsOf("MS/R/005").forEach((row) => {
+    const s = String(designVal(row.items, ["QL STATUS"]) || "").replace(/\s+/g, " ").toUpperCase();
+    if (s === "WAITING FOR ORDER") quotation.waitingForOrder += 1;
+    else if (s === "WAITING FOR QUOTE") quotation.waitingForQuote += 1;
+  });
+
+  // 3. Pending orders (Order List MS/R/006): PENDING QTY > 0 and not CLOSED
+  const orderRows = rowsOf("MS/R/006");
+  const enqByOfOrder = new Map(
+    orderRows.map((row) => [String(row._id), designVal(row.items, ["ENQ BY"]) || ""]),
+  );
+  const pendingOrders = orderRows
+    .map((row) => {
+      const items = row.items || [];
+      const pendingQty = Number(designVal(items, ["PENDING QTY"])) || 0;
+      const unitPrice = Number(designVal(items, ["VALUE"])) || 0;
+      const status = String(designVal(items, ["ORDER STATUS"]) || "").toUpperCase();
+      const orderDate = toEpoch(designVal(items, ["ORDER DATE"]));
+      const leadTime = Number(designVal(items, ["LEAD TIME"]));
+      return {
+        rowId: row._id,
+        status,
+        customer: designVal(items, ["CUSTOMER NAME", "CUSTOMER-NAME"]) || "-",
+        partName: designVal(items, ["PART NAME", "PART-NAME"]) || "-",
+        partNo: designVal(items, ["PART NO", "PART-NO"]) || "-",
+        pendingQty,
+        // VALUE on Order List is the unit price
+        pendingValue: Number((pendingQty * unitPrice).toFixed(2)),
+        leadTimeMissing: !Number.isFinite(leadTime),
+        ...dueInfo(orderDate, Number.isFinite(leadTime) ? leadTime : 0),
+      };
+    })
+    .filter((r) => r.pendingQty > 0 && r.status !== "CLOSED")
+    .sort((a, b) => (a.dueDays ?? Infinity) - (b.dueDays ?? Infinity));
+
+  // 4. Pending payments (Dockets MS/R/006A): PAYMENT not CLOSED; due = DELIVERY DATE + CREDIT PERIOD
+  const docketRows = rowsOf("MS/R/006A");
+  const pendingPayments = docketRows
+    .filter((row) => String(designVal(row.items, ["PAYMENT"]) || "").toUpperCase() !== "CLOSED")
+    .map((row) => {
+      const items = row.items || [];
+      const creditPeriod = Number(designVal(items, ["CREDIT PERIOD"])) || 0;
+      return {
+        rowId: row._id,
+        customer: designVal(items, ["CUSTOMER NAME", "CUSTOMER-NAME"]) || "-",
+        partNo: designVal(items, ["PART NO", "PART-NO"]) || "-",
+        invoiceNo: designVal(items, ["INVOICE NO"]) || "-",
+        value: Number(designVal(items, ["VALUE"])) || 0,
+        creditPeriod,
+        ...dueInfo(toEpoch(designVal(items, ["DELIVERY DATE"])), creditPeriod),
+      };
+    })
+    .sort((a, b) => (a.dueDays ?? Infinity) - (b.dueDays ?? Infinity));
+
+  // 5. Sales trend (Dockets): VALUE + DELIVERY QTY per day / month / year of DELIVERY DATE.
+  // ENQ BY comes from the linked Order List row (docket.rowDataId = order row _id).
+  const buckets = new Map();
+  docketRows.forEach((row) => {
+    const items = row.items || [];
+    const delivered = toEpoch(designVal(items, ["DELIVERY DATE"]));
+    if (delivered === null) return;
+    if (startDate !== null && delivered < startDate) return;
+    if (endDate !== null && delivered > endDate) return;
+    if (enqByFilter) {
+      const enqBy = String(enqByOfOrder.get(String(row.rowDataId)) || "").toUpperCase();
+      if (enqBy !== enqByFilter) return;
+    }
+    const { key, label } = periodOf(delivered, groupBy);
+    const b = buckets.get(key) || { key, period: label, value: 0, deliveryQty: 0 };
+    b.value += Number(designVal(items, ["VALUE"])) || 0;
+    b.deliveryQty += Number(designVal(items, ["DELIVERY QTY"])) || 0;
+    buckets.set(key, b);
+  });
+  const trend = [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+
+  const enqByOptions = [
+    ...new Set(
+      [...orderRows, ...rowsOf("MS/R/005")]
+        .map((row) => designVal(row.items, ["ENQ BY"]))
+        .filter(Boolean),
+    ),
+  ].sort();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      customerCount,
+      quotation,
+      pendingOrders: { count: pendingOrders.length, rows: pendingOrders },
+      pendingPayments: { count: pendingPayments.length, rows: pendingPayments },
+      salesTrend: { groupBy, data: trend, enqByOptions },
+    },
+  });
+});
 
 // 4. OEE Dashboard
 exports.getOEEDashboard = catchAsyncErrors(async (req, res, next) => {
@@ -2841,25 +3224,54 @@ exports.getEmployeeOverheadDashboard = catchAsyncErrors(
 
     const { department } = req.query;
 
-    // Actual OverHead = Count of active employees
-    let activeEmployees = employeeHistoryProcess.data.filter((row) => {
-      const relievingDate = row.items.find(
-        (i) => i.key === "DATE OF RELELIVING",
-      )?.value;
-      return !relievingDate || relievingDate === "";
-    });
+    // The column is spelled "DATE OF RELELIVING" in the live schema; accept the correct spelling too
+    const RELIEVING_KEYS = ["DATE OF RELELIVING", "DATE OF RELIEVING"];
+    const relievingOf = (row) => {
+      const v = row.items.find((i) => RELIEVING_KEYS.includes(String(i.key || "").trim().toUpperCase()))?.value;
+      return v === undefined || v === null ? "" : String(v).trim();
+    };
+    const epochField = (row, key) => {
+      const n = Number(row.items.find((i) => i.key === key)?.value);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
 
+    let employees = employeeHistoryProcess.data;
     if (department) {
-      activeEmployees = activeEmployees.filter((row) => {
+      employees = employees.filter((row) => {
         const dept = row.items.find((i) => i.key === "DEPARTMENT")?.value;
         return dept?.toLowerCase() === department.toLowerCase();
       });
     }
 
+    // Actual OverHead = Count of active employees (no relieving date)
+    const activeEmployees = employees.filter((row) => relievingOf(row) === "");
+
+    // 12-month retention: of the people on staff 12 months ago, how many are still with us.
+    // On staff 12 months ago = joined on/before that date and not relieved before it.
+    const yearAgo = new Date();
+    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+    const yearAgoEpoch = yearAgo.getTime();
+    const onStaffYearAgo = employees.filter((row) => {
+      const joined = epochField(row, "DATE OF JOINING");
+      if (joined === null || joined > yearAgoEpoch) return false;
+      const relieved = relievingOf(row);
+      const relievedEpoch = Number(relieved);
+      if (relieved === "") return true;
+      // Relieving date that is not a valid date: treat as left (cannot place it in time)
+      return Number.isFinite(relievedEpoch) && relievedEpoch > yearAgoEpoch;
+    });
+    const stillHere = onStaffYearAgo.filter((row) => relievingOf(row) === "");
+    const retentionRate = onStaffYearAgo.length
+      ? Number(((stillHere.length / onStaffYearAgo.length) * 100).toFixed(1))
+      : null;
+
     res.status(200).json({
       success: true,
       data: {
         actualOverHead: activeEmployees.length,
+        retentionRate,
+        retentionBase: onStaffYearAgo.length,
+        leftInLast12Months: onStaffYearAgo.length - stillHere.length,
       },
     });
   },
@@ -2889,8 +3301,10 @@ exports.getEmployeeAttendanceDashboard = catchAsyncErrors(
       const joinValue = row.items.find(
         (i) => i.key === "DATE OF JOINING",
       )?.value;
-      const reliefValue = row.items.find(
-        (i) => i.key === "DATE OF RELELIVING",
+      const reliefValue = row.items.find((i) =>
+        ["DATE OF RELELIVING", "DATE OF RELIEVING"].includes(
+          String(i.key || "").trim().toUpperCase(),
+        ),
       )?.value;
 
       const joinEpoch = Number(joinValue);

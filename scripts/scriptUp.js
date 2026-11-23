@@ -336,6 +336,121 @@ function renameHeadersOnProcess(process, renames) {
   return { applied, skipped };
 }
 
+/**
+ * Procurement Register (PR/R/003): remove PART NAME + MATERIAL, add SUB PART NAME
+ * (in PART NAME's old position, right after PART NO).
+ * SUB PART NAME is backfilled from BOM (DD/R/002) SUB PARTS: the product in Products
+ * (DD/R/002A) matching the row's PART NO (+ PART NAME / TYPE / MATERIAL when present),
+ * then the BOM line of that product whose ITEM CODE (or ITEM NAME + GRADE) matches the row.
+ * Idempotent: re-running only fills still-empty SUB PART NAME cells.
+ */
+const PROCUREMENT_REMOVED_HEADERS = ["PART NAME", "MATERIAL"];
+const PROCUREMENT_SUB_PART_HEADER = "SUB PART NAME";
+
+function migrateProcurementSubPartName(procurement, productsProcess, bomProcess) {
+  const norm = (v) =>
+    String(Array.isArray(v) ? v.join(",") : v ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase();
+  const map = (items = []) =>
+    Object.fromEntries(items.map((i) => [norm(i.key), i.value]));
+
+  const bomById = new Map(
+    (bomProcess?.data || []).map((b) => [String(b._id), map(b.items)]),
+  );
+  const products = (productsProcess?.data || []).map((p) => {
+    const m = map(p.items);
+    const detailing = Array.isArray(m["DETAILING PRODUCT"]) ? m["DETAILING PRODUCT"] : [];
+    return {
+      partNo: norm(m["PART NO"]),
+      partName: norm(m["PART NAME"]),
+      type: norm(m["TYPE"]),
+      material: norm(m["MATERIAL"]),
+      bomLines: detailing.map((id) => bomById.get(String(id))).filter(Boolean),
+    };
+  });
+
+  const findSubPart = (row) => {
+    const r = map(row.items);
+    const partNo = norm(r["PART NO"]);
+    if (!partNo) return "";
+    let candidates = products.filter((p) => p.partNo === partNo);
+    // Narrow by the old identity columns when they are filled
+    for (const [field, key] of [["partName", "PART NAME"], ["type", "TYPE"], ["material", "MATERIAL"]]) {
+      const want = norm(r[key]);
+      if (!want) continue;
+      const narrowed = candidates.filter((p) => p[field] === want);
+      if (narrowed.length) candidates = narrowed;
+    }
+    const lines = candidates.flatMap((p) => p.bomLines);
+    const itemCode = norm(r["ITEM CODE"]);
+    let hit = itemCode ? lines.find((b) => norm(b["ITEM CODE"]) === itemCode) : null;
+    if (!hit) {
+      const itemName = norm(r["ITEM NAME"]);
+      const grade = norm(r["GRADE"]);
+      if (itemName) {
+        hit = lines.find(
+          (b) => norm(b["ITEM-NAME"]) === itemName && (!grade || norm(b["GRADE"]) === grade),
+        );
+      }
+    }
+    return hit ? String(hit["SUB PARTS"] ?? "").trim() : "";
+  };
+
+  const headers = procurement.headers || [];
+  const upperHeaders = headers.map((h) => norm(h));
+  const hasSubPart = upperHeaders.includes(PROCUREMENT_SUB_PART_HEADER);
+
+  let filled = 0;
+  let unmatched = 0;
+  let removedCells = 0;
+  let inserted = 0;
+
+  // 1. Rows: fill SUB PART NAME (using old columns), then drop PART NAME / MATERIAL cells
+  for (const row of procurement.data || []) {
+    if (!Array.isArray(row.items)) row.items = [];
+    let subItem = row.items.find((i) => norm(i.key) === PROCUREMENT_SUB_PART_HEADER);
+    if (!subItem || !String(subItem.value ?? "").trim()) {
+      const value = findSubPart(row);
+      if (value) filled += 1;
+      else unmatched += 1;
+      if (subItem) {
+        subItem.value = value;
+      } else {
+        inserted += 1;
+        const anchor = row.items.findIndex((i) => norm(i.key) === "PART NAME");
+        const afterPartNo = row.items.findIndex((i) => norm(i.key) === "PART NO");
+        const at = anchor >= 0 ? anchor : afterPartNo >= 0 ? afterPartNo + 1 : row.items.length;
+        row.items.splice(at, 0, { key: PROCUREMENT_SUB_PART_HEADER, value, process: "value" });
+      }
+    }
+    const before = row.items.length;
+    row.items = row.items.filter((i) => !PROCUREMENT_REMOVED_HEADERS.includes(norm(i.key)));
+    removedCells += before - row.items.length;
+  }
+
+  // 2. Headers: SUB PART NAME takes PART NAME's slot; MATERIAL removed
+  let headerChanged = false;
+  if (!hasSubPart) {
+    const anchor = upperHeaders.indexOf("PART NAME");
+    const afterPartNo = upperHeaders.indexOf("PART NO");
+    const at = anchor >= 0 ? anchor : afterPartNo >= 0 ? afterPartNo + 1 : headers.length;
+    headers.splice(at, 0, PROCUREMENT_SUB_PART_HEADER);
+    headerChanged = true;
+  }
+  const keptHeaders = headers.filter((h) => !PROCUREMENT_REMOVED_HEADERS.includes(norm(h)));
+  if (keptHeaders.length !== headers.length) headerChanged = true;
+  procurement.headers = keptHeaders;
+
+  const changed = headerChanged || filled > 0 || removedCells > 0 || inserted > 0;
+  if (changed) {
+    procurement.markModified("headers");
+    procurement.markModified("data");
+  }
+  return { changed, headerChanged, filled, unmatched, removedCells };
+}
+
 async function main() {
   if (!dbUri) {
     throw new Error("DB_LOCAL_URI is not set in config/config.env");
@@ -457,6 +572,37 @@ async function main() {
   console.log(
     `\nDone renames. Applied ${totalRenamed}, skipped ${totalRenameSkipped}.`,
   );
+
+  // Procurement Register — PART NAME / MATERIAL → SUB PART NAME (from BOM)
+  {
+    const procurement = await Process.findOne({ processId: "PR/R/003" });
+    if (procurement) {
+      const [productsProcess, bomProcess] = await Promise.all([
+        Process.findOne({ processId: "DD/R/002A" }).lean(),
+        Process.findOne({ processId: "DD/R/002" }).lean(),
+      ]);
+      console.log(
+        `\n→ PR/R/003 (${procurement.process}) — remove PART NAME / MATERIAL, add SUB PART NAME from BOM`,
+      );
+      console.log(`  before: [${(procurement.headers || []).join(", ")}]`);
+      const result = migrateProcurementSubPartName(
+        procurement,
+        productsProcess,
+        bomProcess,
+      );
+      if (result.changed) {
+        await procurement.save();
+        console.log(`  after:  [${(procurement.headers || []).join(", ")}]`);
+        console.log(
+          `  SUB PART NAME filled on ${result.filled} row(s); ${result.unmatched} row(s) had no matching BOM line (left blank); removed ${result.removedCells} old cell(s)`,
+        );
+      } else {
+        console.log("  nothing to change (already migrated)");
+      }
+    } else {
+      console.warn("⚠  Process PR/R/003 not found — skip SUB PART NAME migration");
+    }
+  }
 
   console.log("\n→ SerialNumber seeds");
   for (const seed of SERIAL_SEEDS) {
