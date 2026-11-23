@@ -112,6 +112,18 @@ const HEADER_UPDATES = [
     ],
   },
   {
+    processId: "MR/R/005A",
+    description:
+      "Continous Improvement Status — DEPARTMENT (dropdown of sidebar departments) after IMPROVEMENT ACTION",
+    headers: [
+      {
+        headerName: "DEPARTMENT",
+        afterHeader: "IMPROVEMENT ACTION",
+        processType: "select",
+      },
+    ],
+  },
+  {
     processId: "QA/R/009",
     description:
       "Process Control Plan — PART NO / PART NAME at indexes 0–1 (from Product List parent)",

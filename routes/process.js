@@ -67,6 +67,10 @@ const {
   getCertificateRenewalDashboard,
   getDesignDashboard,
   getSalesDashboard,
+  getPurchaseDashboard,
+  getStoreDashboard,
+  searchStoreStock,
+  getQualityDepartmentDashboard,
 } = require("../controllers/processController");
 
 const {
@@ -112,6 +116,10 @@ router.route('/main/manufacturing/settingsHour').get(getMainSettings);
 
 router.route('/design/dashboard').get(isAuthenticatedUser, getDesignDashboard);
 router.route('/sales/dashboard').get(isAuthenticatedUser, getSalesDashboard);
+router.route('/purchase/dashboard').get(isAuthenticatedUser, getPurchaseDashboard);
+router.route('/store/dashboard').get(isAuthenticatedUser, getStoreDashboard);
+router.route('/quality/dashboard').get(isAuthenticatedUser, getQualityDepartmentDashboard);
+router.route('/store/stock-search').get(isAuthenticatedUser, searchStoreStock);
 router.route('/design/npdRegister').get(getNPDDashboardDetails);
 router.route('/design/productsDashboard').get(getProductDashboard);
 router.route('/design/revisionControl').get(getRevisionControlDashboard);

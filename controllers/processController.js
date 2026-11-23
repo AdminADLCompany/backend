@@ -2672,7 +2672,8 @@ exports.getSalesDashboard = catchAsyncErrors(async (req, res, next) => {
       const unitPrice = Number(designVal(items, ["VALUE"])) || 0;
       const status = String(designVal(items, ["ORDER STATUS"]) || "").toUpperCase();
       const orderDate = toEpoch(designVal(items, ["ORDER DATE"]));
-      const leadTime = Number(designVal(items, ["LEAD TIME"]));
+      const leadTimeRaw = String(designVal(items, ["LEAD TIME"]) ?? "").trim();
+      const leadTime = leadTimeRaw === "" ? NaN : Number(leadTimeRaw);
       return {
         rowId: row._id,
         status,
@@ -2745,6 +2746,441 @@ exports.getSalesDashboard = catchAsyncErrors(async (req, res, next) => {
       pendingOrders: { count: pendingOrders.length, rows: pendingOrders },
       pendingPayments: { count: pendingPayments.length, rows: pendingPayments },
       salesTrend: { groupBy, data: trend, enqByOptions },
+    },
+  });
+});
+
+// Purchase Department Dashboard (single call for the whole Purchase dashboard)
+// GET /purchase/dashboard?vendor=&itemName=&partNo=&supplier=
+//   vendor / itemName / partNo → filter Procurement Detail; supplier → filter Supplier Payment
+exports.getPurchaseDashboard = catchAsyncErrors(async (req, res, next) => {
+  const norm = (v) => String(v ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+  const want = {
+    vendor: norm(req.query.vendor),
+    itemName: norm(req.query.itemName),
+    partNo: norm(req.query.partNo),
+    supplier: norm(req.query.supplier),
+  };
+  // Unique dropdown values; "xxx" and "XXX" are the same choice (filters match case-insensitively)
+  const sortedUnique = (values) => {
+    const seen = new Map();
+    values.forEach((v) => {
+      const text = String(v || "").trim();
+      if (text && !seen.has(norm(text))) seen.set(norm(text), text);
+    });
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  };
+
+  const processes = await Process.find({ processId: { $in: ["PR/R/003", "PR/R/003A"] } })
+    .select("processId data")
+    .lean();
+  const byId = Object.fromEntries(processes.map((p) => [p.processId, p]));
+  const procurementRows = byId["PR/R/003"]?.data || [];
+  const inwardRows = byId["PR/R/003A"]?.data || [];
+
+  // 1. Procurement Detail (PR/R/003): not CLOSED and still has quantity to receive.
+  // An empty PENDING QTY means nothing has been received yet → the full QTY is pending.
+  const pendingAll = procurementRows
+    .map((row) => {
+      const items = row.items || [];
+      const qty = Number(designVal(items, ["QTY"])) || 0;
+      const pendingRaw = designVal(items, ["PENDING QTY"]);
+      const pendingQty =
+        pendingRaw === undefined || pendingRaw === null || String(pendingRaw).trim() === ""
+          ? qty
+          : Number(pendingRaw) || 0;
+      const unitPrice = Number(designVal(items, ["VALUE"])) || 0;
+      const leadTimeRaw = String(designVal(items, ["LEAD TIME"]) ?? "").trim();
+      const leadTime = leadTimeRaw === "" ? NaN : Number(leadTimeRaw);
+      return {
+        rowId: row._id,
+        status: String(designVal(items, ["PR STATUS"]) || "").toUpperCase(),
+        vendor: designVal(items, ["VENDOR-NAME", "VENDOR NAME"]) || "",
+        partNo: designVal(items, ["PART NO", "PART-NO"]) || "",
+        itemName: designVal(items, ["ITEM NAME"]) || "",
+        grade: designVal(items, ["GRADE"]) || "",
+        poNo: designVal(items, ["PO NO"]) || "",
+        pendingQty,
+        // VALUE on Procurement Register is the price per unit
+        pendingValue: Number((pendingQty * unitPrice).toFixed(2)),
+        leadTimeMissing: !Number.isFinite(leadTime),
+        ...dueInfo(
+          toEpoch(designVal(items, ["DATE"])),
+          Number.isFinite(leadTime) ? leadTime : 0,
+        ),
+      };
+    })
+    .filter((r) => r.pendingQty > 0 && r.status !== "CLOSED");
+
+  const procurementRowsFiltered = pendingAll
+    .filter(
+      (r) =>
+        (!want.vendor || norm(r.vendor) === want.vendor) &&
+        (!want.itemName || norm(r.itemName) === want.itemName) &&
+        (!want.partNo || norm(r.partNo) === want.partNo),
+    )
+    .sort((a, b) => (a.dueDays ?? Infinity) - (b.dueDays ?? Infinity));
+
+  // 2. Supplier Payment (Inward PR/R/003A): PAYMENT = OPEN.
+  // VENDOR NAME is often blank on Inward → fall back to the linked procurement row's VENDOR-NAME.
+  const procurementVendorById = new Map(
+    procurementRows.map((row) => [
+      String(row._id),
+      designVal(row.items, ["VENDOR-NAME", "VENDOR NAME"]) || "",
+    ]),
+  );
+  const openPaymentsAll = inwardRows
+    .filter((row) => norm(designVal(row.items, ["PAYMENT"])) === "OPEN")
+    .map((row) => {
+      const items = row.items || [];
+      const creditPeriod = Number(designVal(items, ["CREDIT PERIOD"])) || 0;
+      const vendor =
+        designVal(items, ["VENDOR NAME", "VENDOR-NAME"]) ||
+        procurementVendorById.get(String(row.rowDataId)) ||
+        "";
+      return {
+        rowId: row._id,
+        vendor,
+        invoiceNo: designVal(items, ["INVOICE NO"]) || "",
+        poNo: designVal(items, ["PO NO"]) || "",
+        itemName: designVal(items, ["ITEM NAME"]) || "",
+        value: Number(designVal(items, ["VALUE"])) || 0,
+        creditPeriod,
+        creditPeriodMissing: String(designVal(items, ["CREDIT PERIOD"]) ?? "").trim() === "",
+        ...dueInfo(toEpoch(designVal(items, ["DELIVERY DATE"])), creditPeriod),
+      };
+    });
+
+  const paymentRows = openPaymentsAll
+    .filter((r) => !want.supplier || norm(r.vendor) === want.supplier)
+    .sort((a, b) => (a.dueDays ?? Infinity) - (b.dueDays ?? Infinity));
+
+  res.status(200).json({
+    success: true,
+    data: {
+      procurement: {
+        pendingCount: procurementRowsFiltered.length,
+        totalPendingQty: Number(
+          procurementRowsFiltered.reduce((s, r) => s + r.pendingQty, 0).toFixed(2),
+        ),
+        totalPendingValue: Number(
+          procurementRowsFiltered.reduce((s, r) => s + r.pendingValue, 0).toFixed(2),
+        ),
+        rows: procurementRowsFiltered,
+        // Dropdown options come from every pending row, so a filter never hides its own choices
+        options: {
+          vendor: sortedUnique(pendingAll.map((r) => r.vendor)),
+          itemName: sortedUnique(pendingAll.map((r) => r.itemName)),
+          partNo: sortedUnique(pendingAll.map((r) => r.partNo)),
+        },
+      },
+      supplierPayment: {
+        totalValue: Number(paymentRows.reduce((s, r) => s + r.value, 0).toFixed(2)),
+        supplierCount: new Set(paymentRows.map((r) => norm(r.vendor)).filter(Boolean)).size,
+        withoutSupplier: paymentRows.filter((r) => !r.vendor).length,
+        openCount: paymentRows.length,
+        rows: paymentRows,
+        options: { supplier: sortedUnique(openPaymentsAll.map((r) => r.vendor)) },
+      },
+    },
+  });
+});
+
+// Quality Department Dashboard (single call for the whole Quality dashboard)
+// GET /quality/dashboard?trendBy=month|year&period=<YYYY-MM | YYYY>&ciYear=<YYYY>&ciMonth=<1-12>
+exports.getQualityDepartmentDashboard = catchAsyncErrors(async (req, res, next) => {
+  const trendBy = req.query.trendBy === "year" ? "year" : "month";
+  const ids = [
+    "QA/R/007", "MS/R/006A", "MR/R/005", "MR/R/005A", "QA/R/003",
+    "QA/F/005", "QA/R/002A", "QA/R/011", "QA/R/011A", "DD/R/001", "QA/R/009",
+  ];
+  const processes = await Process.find({ processId: { $in: ids } })
+    .select("processId data")
+    .lean();
+  const byId = Object.fromEntries(processes.map((p) => [p.processId, p]));
+  const rowsOf = (id) => byId[id]?.data || [];
+  const today = startOfDay(Date.now());
+  const norm = (v) => String(v ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+  const plural = (n) => (Math.abs(n) === 1 ? "" : "s");
+
+  // 1. Customer rejection rate: FAILED QTY (Customer Complient Register) ÷ DELIVERY QTY
+  //    (Dockets raised against Order List) × 100, per month or per year.
+  const buckets = new Map();
+  const bucket = (epoch) => {
+    const { key, label } = periodOf(epoch, trendBy);
+    if (!buckets.has(key)) buckets.set(key, { key, period: label, failedQty: 0, deliveredQty: 0 });
+    return buckets.get(key);
+  };
+  let openComplaints = 0;
+  rowsOf("QA/R/007").forEach((row) => {
+    const items = row.items || [];
+    if (norm(designVal(items, ["CCR STATUS"])) !== "CLOSED") openComplaints += 1;
+    const date = toEpoch(designVal(items, ["DATE"]));
+    if (date !== null) bucket(date).failedQty += Number(designVal(items, ["FAILED QTY"])) || 0;
+  });
+  rowsOf("MS/R/006A").forEach((row) => {
+    const date = toEpoch(designVal(row.items, ["DELIVERY DATE"]));
+    if (date !== null) bucket(date).deliveredQty += Number(designVal(row.items, ["DELIVERY QTY"])) || 0;
+  });
+  const rate = (failed, delivered) =>
+    delivered > 0 ? Number(((failed / delivered) * 100).toFixed(2)) : null;
+  const trend = [...buckets.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((b) => ({ ...b, rate: rate(b.failedQty, b.deliveredQty) }));
+  const currentKey = periodOf(Date.now(), trendBy).key;
+  const requested = String(req.query.period || "");
+  const periodKey =
+    requested === "all" ? "all" : trend.some((t) => t.key === requested) ? requested : currentKey;
+  const inPeriod = periodKey === "all" ? trend : trend.filter((t) => t.key === periodKey);
+  const overallFailed = inPeriod.reduce((s, t) => s + t.failedQty, 0);
+  const overallDelivered = inPeriod.reduce((s, t) => s + t.deliveredQty, 0);
+  const periodOptions = [...new Set([currentKey, ...trend.map((t) => t.key)])]
+    .sort()
+    .reverse()
+    .map((key) => ({
+      key,
+      label: trend.find((t) => t.key === key)?.period ||
+        periodOf(Date.now(), trendBy).label,
+    }));
+
+  // 2. Continuous improvement by department (DEPARTMENT is on the Improvement Status child rows,
+  //    MR/R/005A; each improvement is counted once per department, dated by the improvement's DATE)
+  const ciYear = Number(req.query.ciYear) || null;
+  const ciMonth = Number(req.query.ciMonth) || null; // 1-12
+  const deptsByImprovement = new Map();
+  rowsOf("MR/R/005A").forEach((row) => {
+    const dept = String(designVal(row.items, ["DEPARTMENT"]) || "").trim();
+    if (!row.rowDataId || !dept) return;
+    const key = String(row.rowDataId);
+    if (!deptsByImprovement.has(key)) deptsByImprovement.set(key, new Set());
+    deptsByImprovement.get(key).add(dept);
+  });
+  const ciCounts = new Map();
+  const ciYears = new Set();
+  let ciTotal = 0;
+  rowsOf("MR/R/005").forEach((row) => {
+    const date = toEpoch(designVal(row.items, ["DATE"]));
+    if (date !== null) ciYears.add(new Date(date).getFullYear());
+    if (ciYear || ciMonth) {
+      if (date === null) return;
+      const d = new Date(date);
+      if (ciYear && d.getFullYear() !== ciYear) return;
+      if (ciMonth && d.getMonth() + 1 !== ciMonth) return;
+    }
+    ciTotal += 1;
+    const depts = deptsByImprovement.get(String(row._id));
+    (depts && depts.size ? [...depts] : ["Not assigned"]).forEach((dept) =>
+      ciCounts.set(dept, (ciCounts.get(dept) || 0) + 1),
+    );
+  });
+  const improvements = [...ciCounts.entries()]
+    .map(([department, count]) => ({ department, count }))
+    .sort((a, b) => b.count - a.count || a.department.localeCompare(b.department));
+
+  // 3. Incoming inspection pending: INSPECTION-STATUS not Done
+  const incomingPending = rowsOf("QA/R/003").filter(
+    (row) => norm(designVal(row.items, ["INSPECTION-STATUS"])) !== "DONE",
+  ).length;
+
+  // 4. Quality audits pending: AUDIT STATUS not CLOSED; DUE = days open since audit DATE
+  const audits = rowsOf("QA/F/005")
+    .filter((row) => norm(designVal(row.items, ["AUDIT STATUS"])) !== "CLOSED")
+    .map((row) => {
+      const items = row.items || [];
+      const date = toEpoch(designVal(items, ["DATE"]));
+      const daysOpen = date === null ? null : Math.max(0, Math.round((today - startOfDay(date)) / DAY_MS));
+      return {
+        rowId: row._id,
+        department: designVal(items, ["DEPARTMENT"]) || "-",
+        nc: Number(designVal(items, ["NC"])) || 0,
+        responsible: designVal(items, ["RESPONSIBLE"]) || "-",
+        date,
+        daysOpen,
+        due: daysOpen === null ? "-" : `${daysOpen} day${plural(daysOpen)} open`,
+      };
+    })
+    .sort((a, b) => (b.daysOpen ?? -1) - (a.daysOpen ?? -1));
+
+  // 5. Instruments pending: calibration DUE already passed or within the next 10 days
+  const DUE_SOON_DAYS = 10;
+  let instrumentsOverdue = 0;
+  let instrumentsDueSoon = 0;
+  rowsOf("QA/R/002A").forEach((row) => {
+    const due = toEpoch(designVal(row.items, ["DUE"]) || designVal(row.items, ["DATE"]));
+    if (due === null) return;
+    const d = Math.round((startOfDay(due) - today) / DAY_MS);
+    if (d < 0) instrumentsOverdue += 1;
+    else if (d <= DUE_SOON_DAYS) instrumentsDueSoon += 1;
+  });
+
+  // 6. Certificate renewal pending: latest EXPIRY DATE (renewal records) overdue or within 30 days
+  const EXPIRY_KEYS = ["EXPIRY DATE", "EXPIRY", "VALID TILL", "VALID UPTO", "DUE DATE", "DUE"];
+  const latestExpiry = new Map();
+  rowsOf("QA/R/011A").forEach((d) => {
+    if (!d.rowDataId) return;
+    const exp =
+      toEpoch(designVal(d.items, EXPIRY_KEYS)) ??
+      toEpoch(designVal(d.items, ["NEXT RENEVAL", "NEXT RENEWAL"]));
+    if (exp === null) return;
+    const k = String(d.rowDataId);
+    if (!latestExpiry.has(k) || exp > latestExpiry.get(k)) latestExpiry.set(k, exp);
+  });
+  let certificatesDue = 0;
+  let certificatesOverdue = 0;
+  rowsOf("QA/R/011").forEach((row) => {
+    const exp =
+      latestExpiry.get(String(row._id)) ??
+      toEpoch(designVal(row.items, EXPIRY_KEYS)) ??
+      toEpoch(designVal(row.items, ["NEXT RENEVAL", "NEXT RENEWAL"]));
+    if (exp === null) return;
+    const d = Math.ceil((exp - Date.now()) / DAY_MS);
+    if (d <= 30) certificatesDue += 1;
+    if (d < 0) certificatesOverdue += 1;
+  });
+
+  // 7. Process Control Plan pending: products whose number of revisions (Product List REV NO
+  //    entries) does not match the number of Process Control Plan entries made for that product
+  const pcpCountByProduct = new Map();
+  rowsOf("QA/R/009").forEach((r) => {
+    if (!r.rowDataId) return;
+    const k = String(r.rowDataId);
+    pcpCountByProduct.set(k, (pcpCountByProduct.get(k) || 0) + 1);
+  });
+  const pcpPendingRows = rowsOf("DD/R/001")
+    .map((row) => {
+      const rev = (row.items || []).find((i) => norm(i.key) === "REV NO")?.value;
+      const revisions = Array.isArray(rev)
+        ? rev.filter((v) => String(v).trim() !== "").length
+        : String(rev ?? "").trim()
+          ? 1
+          : 0;
+      const pcpEntries = pcpCountByProduct.get(String(row._id)) || 0;
+      return {
+        rowId: row._id,
+        partNo: designVal(row.items, ["PART NO", "PART-NO"]) || "-",
+        partName: designVal(row.items, ["PART NAME", "PART-NAME"]) || "-",
+        revisions,
+        pcpEntries,
+        missing: revisions - pcpEntries,
+      };
+    })
+    .filter((r) => r.revisions !== r.pcpEntries)
+    .sort((a, b) => b.missing - a.missing);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      customerRejection: {
+        trendBy,
+        trend,
+        openComplaints,
+        period: periodKey,
+        periodOptions,
+        overall: {
+          failedQty: overallFailed,
+          deliveredQty: overallDelivered,
+          rate: rate(overallFailed, overallDelivered),
+        },
+      },
+      continuousImprovement: {
+        total: ciTotal,
+        data: improvements,
+        years: [...ciYears].sort((a, b) => b - a),
+        filter: { year: ciYear, month: ciMonth },
+      },
+      incomingInspection: { pendingCount: incomingPending },
+      qualityAudits: { pendingCount: audits.length, rows: audits },
+      instruments: {
+        pendingCount: instrumentsOverdue + instrumentsDueSoon,
+        overdue: instrumentsOverdue,
+        dueSoon: instrumentsDueSoon,
+        dueSoonDays: DUE_SOON_DAYS,
+      },
+      certificates: { pendingCount: certificatesDue, overdue: certificatesOverdue },
+      processControlPlan: { pendingCount: pcpPendingRows.length, rows: pcpPendingRows },
+    },
+  });
+});
+
+// Store Department Dashboard
+const stockRowView = (row) => {
+  const items = row.items || [];
+  const num = (keys) => Number(designVal(items, keys)) || 0;
+  return {
+    rowId: row._id,
+    itemCategory: designVal(items, ["ITEM CATEGORY"]) || "",
+    itemCode: designVal(items, ["ITEM CODE"]) || "",
+    itemName: designVal(items, ["ITEM NAME"]) || "",
+    in: num(["IN"]),
+    out: num(["OUT"]),
+    reject: num(["REJECT"]),
+    stock: num(["STOCK"]),
+  };
+};
+const isFinishedGood = (category) => {
+  // Accepts FINISHED GOOD(S) and the common misspelling FINSIHED GOOD(S)
+  const c = String(category || "").replace(/\s+/g, " ").trim().toUpperCase();
+  return /^(FINISHED|FINSIHED) GOODS?$/.test(c) || c === "FG";
+};
+
+// GET /store/dashboard → finished-goods stock table
+exports.getStoreDashboard = catchAsyncErrors(async (req, res, next) => {
+  const stockProcess = await Process.findOne({ processId: "ST/R/006" })
+    .select("data")
+    .lean();
+  const rows = (stockProcess?.data || [])
+    .map(stockRowView)
+    .filter((r) => isFinishedGood(r.itemCategory))
+    .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+
+  res.status(200).json({
+    success: true,
+    data: {
+      finishedGoods: {
+        itemCount: rows.length,
+        totalStock: rows.reduce((s, r) => s + r.stock, 0),
+        rows,
+      },
+    },
+  });
+});
+
+// GET /store/stock-search?q=<item code or name>&limit=50
+// Searches ALL stock items (any category); matches ITEM CODE or ITEM NAME containing q.
+exports.searchStoreStock = catchAsyncErrors(async (req, res, next) => {
+  const q = String(req.query.q || "").replace(/\s+/g, " ").trim().toUpperCase();
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  if (!q) {
+    return res.status(200).json({ success: true, data: { query: "", total: 0, rows: [] } });
+  }
+
+  const stockProcess = await Process.findOne({ processId: "ST/R/006" })
+    .select("data")
+    .lean();
+  const matches = (stockProcess?.data || [])
+    .map(stockRowView)
+    .filter(
+      (r) =>
+        r.itemCode.toUpperCase().includes(q) || r.itemName.toUpperCase().includes(q),
+    )
+    // Exact code/name matches first, then codes that start with the text, then the rest
+    .sort((a, b) => {
+      const rank = (r) =>
+        r.itemCode.toUpperCase() === q || r.itemName.toUpperCase() === q
+          ? 0
+          : r.itemCode.toUpperCase().startsWith(q) || r.itemName.toUpperCase().startsWith(q)
+            ? 1
+            : 2;
+      return rank(a) - rank(b) || a.itemCode.localeCompare(b.itemCode);
+    });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      query: req.query.q,
+      total: matches.length,
+      totalStock: matches.reduce((s, r) => s + r.stock, 0),
+      rows: matches.slice(0, limit),
     },
   });
 });
