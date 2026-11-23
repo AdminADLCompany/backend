@@ -32,6 +32,13 @@ const userSchema = mongoose.Schema({
     type: [String],
     default: [],
   },
+  // Dashboard cards this user may see ("main.orderList", "design.products", … — see
+  // client/src/utils/dashboardCatalog.js). Left unset until an admin configures it; while unset the
+  // old rules apply (main cards by process access, department dashboards by department access).
+  dashboardAccess: {
+    type: [String],
+    default: undefined,
+  },
   accessLevel: {
     type: String,
     required: true,

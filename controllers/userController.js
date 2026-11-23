@@ -21,9 +21,18 @@ exports.getAllUsers = catchAsyncErrors(async (req, res, next) => {
   }
 });
 
+// Dashboard keys look like "main.orderList" / "quality.customerRejection"
+const sanitizeDashboardAccess = (keys) => [
+  ...new Set(
+    keys
+      .map((k) => String(k || "").trim())
+      .filter((k) => /^[a-z]+\.[A-Za-z0-9]+$/.test(k)),
+  ),
+];
+
 exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   // getting the request body details one by one from req.body
-  let { email, employeeId, name, role, password, department, accessLevel, processAccess } =
+  let { email, employeeId, name, role, password, department, accessLevel, processAccess, dashboardAccess } =
     req.body;
 
   // Finding the user already exists or not.
@@ -65,6 +74,10 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
     department,
     accessLevel,
     processAccess: Array.isArray(processAccess) ? processAccess : [],
+    // Only stored when the admin ticked dashboards; otherwise the old visibility rules apply
+    ...(Array.isArray(dashboardAccess)
+      ? { dashboardAccess: sanitizeDashboardAccess(dashboardAccess) }
+      : {}),
     password,
   });
 
@@ -300,7 +313,10 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
     role: req.body.role,
     department: req.body.department,
     accessLevel: req.body.accessLevel,
-    processAccess: req.body.processAccess
+    processAccess: req.body.processAccess,
+    dashboardAccess: Array.isArray(req.body.dashboardAccess)
+      ? sanitizeDashboardAccess(req.body.dashboardAccess)
+      : undefined,
   };
 
   // If password is provided, hash it before updating
