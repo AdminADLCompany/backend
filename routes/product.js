@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const isAuthenticatedUser = require("../middleware/auth");
+const isAdmin = require("../middleware/isAdmin");
 
 const {
     getAllProducts,
@@ -13,10 +14,10 @@ const {
 } = require('../controllers/productController');
 
 router.route('/all').get(getAllProducts)
-router.route('/create').post(isAuthenticatedUser, createProduct);
+router.route('/create').post(isAuthenticatedUser, isAdmin, createProduct);
 router.route('/:id').get(getProductById)
-    .put(isAuthenticatedUser, updateProduct)
-    .delete(isAuthenticatedUser, deleteProduct);
-router.route('/graph/:id').post(isAuthenticatedUser, addGraphData);
+    .put(isAuthenticatedUser, isAdmin, updateProduct)
+    .delete(isAuthenticatedUser, isAdmin, deleteProduct);
+router.route('/graph/:id').post(isAuthenticatedUser, isAdmin, addGraphData);
 
 module.exports = router;

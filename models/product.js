@@ -27,52 +27,40 @@ const productSchema = new mongoose.Schema({
         required: true
     },
     series: {
-        type: String,
-        required: true
+        type: String
     },
     image: {
-        type: String,
-        required: true
+        type: String
     },
     portSize: {
-        type: String,
-        required: true
+        type: String
     },
     bodySize: {
-        type: String,
-        required: true
+        type: String
     },
     material: {
-        type: String,
-        required: true
+        type: String
     },
     standard: {
-        type: String,
-        required: true
+        type: String
     },
     operatingPressure: {
-        type: String,
-        required: true
+        type: String
     },
     pressureDrop: {
-        type: String,
-        required: true
+        type: String
     },
     ratedFlow: {
-        type: String,
-        required: true
+        type: String
     },
     sealingMaterial: {
-        type: String,
-        required: true
+        type: String
     },
     suggestedFlow: {
-        type: String,
-        required: true
+        type: String
     },
     temperature: {
-        type: String,
-        required: true
+        type: String
     },
     graph: {
         type: [
@@ -81,7 +69,7 @@ const productSchema = new mongoose.Schema({
                 data: [{ type: Number, required: true }]
             }
         ],
-        required: true
+        default: []
     },
     updatedBy: {
         type: mongoose.Schema.Types.ObjectId,

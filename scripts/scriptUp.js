@@ -17,6 +17,7 @@ require("dotenv").config({
 
 const Process = require("../models/process");
 const SerialNumber = require("../models/serialNumber");
+const SubCategory = require("../models/subCategory");
 const {
   prefixForType,
   DEFAULT_PAD_LENGTH,
@@ -614,6 +615,18 @@ async function main() {
     } else {
       console.warn("⚠  Process PR/R/003 not found — skip SUB PART NAME migration");
     }
+  }
+
+  // Products tree: sub-category names are unique per (category, parent) instead of per category.
+  // syncIndexes() drops the old { name, category } unique index and builds the new one (idempotent).
+  {
+    console.log("\n→ SubCategory indexes (nested sub-categories)");
+    const dropped = await SubCategory.syncIndexes();
+    console.log(
+      dropped && dropped.length
+        ? `  dropped old index(es): ${dropped.join(", ")}`
+        : "  indexes already up to date",
+    );
   }
 
   console.log("\n→ SerialNumber seeds");
